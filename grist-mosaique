@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mosaïque de photos</title>
+<script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+<style>
+:root{--bg:#f6f7f5;--fg:#1d2321;--mut:#6b7570;--card:#fff;--line:#d9dedb;--acc:#1f6f5c;--size:180px}
+@media(prefers-color-scheme:dark){:root{--bg:#171b1a;--fg:#e8ecea;--mut:#98a39e;--card:#222827;--line:#343c3a;--acc:#5fc4a9}}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font:14px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;flex-direction:column}
+header{display:flex;gap:12px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+#q{flex:1 1 220px;min-width:160px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg);font:inherit}
+#q:focus,button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+#count{color:var(--mut);white-space:nowrap}
+label.sz{display:flex;gap:6px;align-items:center;color:var(--mut)}
+main{flex:1;overflow:auto;padding:12px}
+#grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--size),1fr));gap:10px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden;cursor:pointer;padding:0;text-align:left;color:inherit;font:inherit;display:flex;flex-direction:column}
+.tile:hover{border-color:var(--acc)}
+.tile .ph{aspect-ratio:1/1;background:var(--line);width:100%;overflow:hidden}
+.tile img{width:100%;height:100%;object-fit:cover;display:block}
+.tile .cap{padding:6px 8px;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.empty{color:var(--mut);padding:40px;text-align:center}
+#modal{position:fixed;inset:0;background:rgba(0,0,0,.78);display:none;z-index:10}
+#modal.on{display:flex}
+.box{margin:auto;width:min(1100px,96vw);height:min(760px,94vh);background:var(--card);border-radius:10px;display:flex;overflow:hidden}
+.view{flex:1 1 60%;background:#0c0f0e;display:flex;flex-direction:column;min-width:0;position:relative}
+.view .main{flex:1;display:flex;align-items:center;justify-content:center;min-height:0;padding:8px}
+.view .main img{max-width:100%;max-height:100%;object-fit:contain}
+.nav{position:absolute;top:50%;transform:translateY(-50%);background:rgba(0,0,0,.5);color:#fff;border:0;width:36px;height:56px;font-size:22px;cursor:pointer;border-radius:6px}
+#prev{left:8px}#next{right:8px}
+.strip{display:flex;gap:6px;padding:6px;overflow-x:auto}
+.strip img{height:48px;border-radius:4px;cursor:pointer;opacity:.6}
+.strip img.cur{opacity:1;outline:2px solid var(--acc)}
+.side{flex:0 0 320px;max-width:42%;display:flex;flex-direction:column;border-left:1px solid var(--line)}
+.side h2{margin:0;padding:12px 14px;font-size:15px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+#fields{flex:1;overflow:auto;padding:10px 14px}
+.f{margin-bottom:10px}
+.f label{display:block;font-size:12px;color:var(--mut);margin-bottom:2px}
+.f input[type=text],.f input[type=number],.f textarea{width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);font:inherit}
+.f textarea{resize:vertical;min-height:36px}
+.f .ro{padding:6px 8px;color:var(--mut);background:var(--bg);border-radius:6px;word-break:break-word}
+.f.saved input,.f.saved textarea{border-color:var(--acc)}
+.x{background:none;border:0;color:var(--fg);font-size:20px;cursor:pointer}
+@media(max-width:700px){.box{flex-direction:column}.side{flex:0 0 45%;max-width:none;border-left:0;border-top:1px solid var(--line)}}
+</style>
+</head>
+<body>
+<header>
+  <input id="q" type="search" placeholder="Rechercher dans toutes les colonnes…" autocomplete="off">
+  <span id="count"></span>
+  <label class="sz">Taille <input id="size" type="range" min="100" max="400" value="180"></label>
+</header>
+<main id="main"><div id="grid"></div><div id="more"></div></main>
+
+<div id="modal" role="dialog" aria-modal="true">
+  <div class="box">
+    <div class="view">
+      <div class="main"><img id="big" alt=""></div>
+      <button class="nav" id="prev" aria-label="Précédent">‹</button>
+      <button class="nav" id="next" aria-label="Suivant">›</button>
+      <div class="strip" id="strip"></div>
+    </div>
+    <div class="side">
+      <h2><span id="mtitle"></span><button class="x" id="close" aria-label="Fermer">×</button></h2>
+      <div id="fields"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const PAGE = 120;
+let records = [], index = [], filtered = [], shown = 0;
+let tok = null, curRow = null, curImg = 0;
+
+// ---------- Utilitaires ----------
+const norm = s => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+const attIds = v => Array.isArray(v) && v[0] === 'L' ? v.slice(1) : [];
+const url = id => tok ? `${tok.baseUrl}/attachments/${id}/download?auth=${tok.token}` : '';
+const fmt = v => v instanceof Date ? v.toLocaleString('fr-FR')
+  : Array.isArray(v) ? v.filter(x => x !== 'L').join(', ')
+  : (v && typeof v === 'object') ? JSON.stringify(v) : (v ?? '');
+const hidden = k => k === 'id' || k === 'Photo' || k === 'manualSort' || k.startsWith('gristHelper_');
+
+async function refreshToken() {
+  try {
+    tok = await grist.docApi.getAccessToken({readOnly: true});
+    document.querySelectorAll('img[data-att]').forEach(i => { if (!i.complete) i.src = url(i.dataset.att); });
+    setTimeout(refreshToken, Math.max(30000, (tok.ttlMsecs || 300000) - 60000));
+  } catch (e) { setTimeout(refreshToken, 10000); }
+}
+
+// ---------- Index de recherche ----------
+function buildIndex() {
+  index = records.map(r => norm(Object.keys(r).filter(k => !hidden(k)).map(k => fmt(r[k])).join(' ')));
+}
+function applyFilter() {
+  const terms = norm($('q').value).split(/\s+/).filter(Boolean);
+  filtered = [];
+  records.forEach((r, i) => {
+    if (!attIds(r.Photo).length) return;
+    if (terms.every(t => index[i].includes(t))) filtered.push(r);
+  });
+  $('count').textContent = `${filtered.length} photo${filtered.length > 1 ? 's' : ''} sur ${records.filter(r => attIds(r.Photo).length).length}`;
+  $('grid').innerHTML = ''; shown = 0;
+  $('main').scrollTop = 0;
+  if (!filtered.length) $('grid').innerHTML = '<div class="empty">Aucune photo ne correspond à la recherche.</div>';
+  renderMore();
+}
+
+// ---------- Rendu progressif ----------
+function renderMore() {
+  const frag = document.createDocumentFragment();
+  filtered.slice(shown, shown + PAGE).forEach(r => {
+    const id = attIds(r.Photo)[0];
+    const b = document.createElement('button');
+    b.className = 'tile'; b.type = 'button';
+    const cap = r.Legende != null && r.Legende !== '' ? fmt(r.Legende) : '';
+    b.innerHTML = `<div class="ph"><img loading="lazy" decoding="async" alt=""></div>${cap ? '<div class="cap"></div>' : ''}`;
+    const img = b.querySelector('img'); img.dataset.att = id; img.src = url(id);
+    if (cap) { b.querySelector('.cap').textContent = cap; b.title = cap; }
+    b.onclick = () => openRow(r.id);
+    frag.appendChild(b);
+  });
+  shown += PAGE;
+  $('grid').appendChild(frag);
+}
+new IntersectionObserver(es => { if (es[0].isIntersecting && shown < filtered.length) renderMore(); },
+  {root: $('main'), rootMargin: '600px'}).observe($('more'));
+
+// ---------- Visionneuse + édition ----------
+function openRow(id) {
+  curRow = id; curImg = 0;
+  const r = records.find(x => x.id === id); if (!r) return closeModal();
+  const ids = attIds(r.Photo);
+  $('big').src = url(ids[curImg]);
+  $('strip').innerHTML = ids.length > 1 ? ids.map((a, i) =>
+    `<img data-i="${i}" data-att="${a}" src="${url(a)}" class="${i === curImg ? 'cur' : ''}" alt="">`).join('') : '';
+  $('strip').querySelectorAll('img').forEach(im => im.onclick = () => {
+    curImg = +im.dataset.i; $('big').src = url(im.dataset.att);
+    $('strip').querySelectorAll('img').forEach(x => x.classList.toggle('cur', x === im));
+  });
+  const pos = filtered.findIndex(x => x.id === id);
+  $('mtitle').textContent = r.Legende ? fmt(r.Legende) : `Ligne ${id}`;
+  $('prev').style.display = $('next').style.display = filtered.length > 1 ? '' : 'none';
+  buildFields(r);
+  $('modal').classList.add('on');
+  if (pos >= 0) try { grist.setCursorPos({rowId: id}); } catch (e) {}
+}
+function buildFields(r) {
+  const box = $('fields'); box.innerHTML = '';
+  Object.keys(r).filter(k => !hidden(k)).forEach(k => {
+    const v = r[k], d = document.createElement('div'); d.className = 'f';
+    const label = k === 'Legende' ? 'Légende' : k;
+    const t = typeof v;
+    if (t === 'string' || t === 'number' || t === 'boolean' || v == null) {
+      const long = t === 'string' && (v.length > 50 || v.includes('\n'));
+      d.innerHTML = `<label></label>`;
+      d.firstChild.textContent = label;
+      let inp;
+      if (t === 'boolean') { inp = document.createElement('input'); inp.type = 'checkbox'; inp.checked = v; }
+      else if (long) { inp = document.createElement('textarea'); inp.value = v; inp.rows = 3; }
+      else { inp = document.createElement('input'); inp.type = t === 'number' ? 'number' : 'text'; inp.step = 'any'; inp.value = v ?? ''; }
+      inp.addEventListener('change', async () => {
+        let nv = t === 'boolean' ? inp.checked : t === 'number' ? (inp.value === '' ? null : Number(inp.value)) : inp.value;
+        try {
+          await grist.getTable().update({id: r.id, fields: grist.mapColumnNamesBack({[k]: nv})});
+          d.classList.add('saved'); setTimeout(() => d.classList.remove('saved'), 900);
+        } catch (e) { alert('Modification impossible : ' + e.message); }
+      });
+      d.appendChild(inp);
+    } else {
+      d.innerHTML = `<label></label><div class="ro"></div>`;
+      d.firstChild.textContent = label + ' (lecture seule)';
+      d.lastChild.textContent = fmt(v);
+    }
+    box.appendChild(d);
+  });
+}
+function step(d) {
+  const i = filtered.findIndex(x => x.id === curRow);
+  if (i < 0 || !filtered.length) return;
+  openRow(filtered[(i + d + filtered.length) % filtered.length].id);
+}
+function closeModal() { $('modal').classList.remove('on'); curRow = null; }
+$('close').onclick = closeModal;
+$('prev').onclick = () => step(-1);
+$('next').onclick = () => step(1);
+$('modal').addEventListener('click', e => { if (e.target === $('modal')) closeModal(); });
+document.addEventListener('keydown', e => {
+  if (!curRow) return;
+  if (e.key === 'Escape') closeModal();
+  const typing = /INPUT|TEXTAREA/.test(document.activeElement.tagName);
+  if (!typing && e.key === 'ArrowLeft') step(-1);
+  if (!typing && e.key === 'ArrowRight') step(1);
+});
+
+// ---------- Contrôles ----------
+let timer;
+$('q').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(applyFilter, 120); });
+$('size').addEventListener('input', e => document.documentElement.style.setProperty('--size', e.target.value + 'px'));
+
+// ---------- Grist ----------
+grist.ready({
+  requiredAccess: 'full',
+  columns: [
+    {name: 'Photo', title: 'Photo', type: 'Attachments'},
+    {name: 'Legende', title: 'Légende (affichée sous l’image)', type: 'Any', optional: true}
+  ]
+});
+grist.onRecords(recs => {
+  records = recs || [];
+  buildIndex();
+  applyFilter();
+  if (curRow) { records.some(r => r.id === curRow) ? buildFieldsIfIdle() : closeModal(); }
+}, {includeColumns: 'all'});
+function buildFieldsIfIdle() {
+  // Ne reconstruit pas le formulaire pendant une saisie
+  if (!/INPUT|TEXTAREA/.test(document.activeElement.tagName)) buildFields(records.find(r => r.id === curRow));
+}
+refreshToken();
+</script>
+</body>
+</html>
