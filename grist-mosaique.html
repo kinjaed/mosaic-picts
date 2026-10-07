@@ -41,6 +41,8 @@ main{flex:1;overflow:auto;padding:12px}
 .f{margin-bottom:10px}
 .f label{display:block;font-size:12px;color:var(--mut);margin-bottom:2px}
 .f input[type=text],.f input[type=number],.f textarea{width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);font:inherit}
+.f select{width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);font:inherit}
+.f.saved select{border-color:var(--acc)}
 .f textarea{resize:vertical;min-height:36px}
 .f .ro{padding:6px 8px;color:var(--mut);background:var(--bg);border-radius:6px;word-break:break-word}
 .f.saved input,.f.saved textarea{border-color:var(--acc)}
@@ -76,7 +78,7 @@ const $ = id => document.getElementById(id);
 const PAGE = 120;
 let records = [], index = [], filtered = [], shown = 0;
 let tok = null, curRow = null, curImg = 0;
-let tableId = null, meta = null, photoCol = 'Photo', legCol = null, hiddenCols = new Set(), roCols = new Set(), colType = {}, loading = false, again = false;
+let refOpts = {}, tableId = null, meta = null, photoCol = 'Photo', legCol = null, hiddenCols = new Set(), roCols = new Set(), colType = {}, loading = false, again = false;
 
 // ---------- Utilitaires ----------
 const norm = s => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -86,7 +88,7 @@ const url = id => tok ? `${tok.baseUrl}/attachments/${id}/download?auth=${tok.to
 const fmt = v => v instanceof Date ? v.toLocaleString('fr-FR')
   : Array.isArray(v) ? v.filter(x => x !== 'L').join(', ')
   : (v && typeof v === 'object') ? JSON.stringify(v) : (v ?? '');
-const hidden = k => k === 'id' || k === photoCol || hiddenCols.has(k);
+const hidden = k => k === 'id' || k === '__raw' || k === photoCol || hiddenCols.has(k);
 
 async function refreshToken() {
   try {
@@ -115,7 +117,7 @@ function applyFilter(keep) {
     if (!attIds(r[photoCol]).length) return;
     if (terms.every(t => index[i].includes(t))) filtered.push(r);
   });
-  $('count').textContent = `${filtered.length} photo${filtered.length > 1 ? 's' : ''} sur ${records.filter(r => attIds(r[photoCol]).length).length} · v4 · ${meta ? meta.length : 0} colonnes lues`;
+  $('count').textContent = `${filtered.length} photo${filtered.length > 1 ? 's' : ''} sur ${records.filter(r => attIds(r[photoCol]).length).length}`;
   $('grid').innerHTML = ''; shown = 0;
   if (!filtered.length) $('grid').innerHTML = `<div class="empty">Aucune photo ne correspond. (${records.length} lignes reçues, colonnes : ${records[0] ? Object.keys(records[0]).filter(k => !k.startsWith('gristHelper_')).join(', ') : 'aucune'})</div>`;
   renderMore();
@@ -167,7 +169,22 @@ function buildFields(r) {
   Object.keys(r).filter(k => !hidden(k)).forEach(k => {
     const v = r[k], d = document.createElement('div'); d.className = 'f';
     const ty = colType[k] || '', t = typeof v;
-    if (!roCols.has(k) && (t === 'string' || t === 'number' || t === 'boolean' || v == null)) {
+    if (ty.startsWith('Ref:') && !roCols.has(k) && refOpts[k]) {
+      d.innerHTML = `<label></label>`;
+      d.firstChild.textContent = k;
+      const sel = document.createElement('select');
+      const cur = r.__raw[k] || 0;
+      sel.innerHTML = '<option value="0"></option>';
+      refOpts[k].forEach(o => { const op = document.createElement('option'); op.value = o.id; op.textContent = o.text; sel.appendChild(op); });
+      sel.value = String(cur);
+      sel.addEventListener('change', async () => {
+        try {
+          await grist.docApi.applyUserActions([['UpdateRecord', tableId, r.id, {[k]: Number(sel.value)}]]);
+          d.classList.add('saved'); setTimeout(() => d.classList.remove('saved'), 900);
+        } catch (e) { alert('Modification impossible : ' + e.message); }
+      });
+      d.appendChild(sel);
+    } else if (!roCols.has(k) && (t === 'string' || t === 'number' || t === 'boolean' || v == null)) {
       const isNum = /^(Int|Numeric)/.test(ty), isBool = ty === 'Bool';
       const long = t === 'string' && (v.length > 50 || v.includes('\n'));
       d.innerHTML = `<label></label>`;
@@ -231,7 +248,7 @@ async function loadMeta() {
     colType[c.colId] = c.type;
     if (/^Ref(List)?:/.test(c.type)) { c.target = c.type.split(':')[1]; c.show = c.visibleCol && byId[c.visibleCol] ? byId[c.visibleCol].colId : null; }
     if (c.type === 'Attachments') hiddenCols.add(c.colId);
-    if (c.target || /^Date/.test(c.type) || c.type === 'Attachments' || (c.isFormula && c.formula)) roCols.add(c.colId);
+    if (c.type.startsWith('RefList:') || /^Date/.test(c.type) || c.type === 'Attachments' || (c.isFormula && c.formula)) roCols.add(c.colId);
   });
 }
 async function load() {
@@ -242,15 +259,22 @@ async function load() {
     const t = await grist.docApi.fetchTable(c.target);
     refs[c.target] = {t, idx: new Map(t.id.map((id, i) => [id, i]))};
   }
+  refOpts = {};
+  for (const c of meta) if (c.target && !c.type.startsWith('RefList:')) {
+    const t = refs[c.target].t;
+    refOpts[c.colId] = t.id.map((id, i) => ({id, text: c.show && t[c.show] ? String(t[c.show][i] ?? '') : String(id)}))
+      .filter(o => o.text !== '').sort((a, b) => a.text.localeCompare(b.text, 'fr', {numeric: true}));
+  }
   const one = (c, v) => {
     const R = refs[c.target], i = R.idx.get(v);
     if (i === undefined) return '';
     return c.show && R.t[c.show] ? String(R.t[c.show][i] ?? '') : String(v);
   };
   records = raw.id.map((id, i) => {
-    const r = {id};
+    const r = {id, __raw: {}};
     for (const c of meta) {
       let v = raw[c.colId] ? raw[c.colId][i] : null;
+      if (c.target) r.__raw[c.colId] = v;
       if (c.type.startsWith('RefList:')) v = Array.isArray(v) ? v.filter(x => x !== 'L').map(x => one(c, x)).join(', ') : '';
       else if (c.target) v = v ? one(c, v) : '';
       else if (c.type === 'Date' && typeof v === 'number') v = new Date(v * 1000).toLocaleDateString('fr-FR', {timeZone: 'UTC'});
