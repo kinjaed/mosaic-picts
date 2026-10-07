@@ -115,7 +115,7 @@ function applyFilter(keep) {
     if (!attIds(r[photoCol]).length) return;
     if (terms.every(t => index[i].includes(t))) filtered.push(r);
   });
-  $('count').textContent = `${filtered.length} photo${filtered.length > 1 ? 's' : ''} sur ${records.filter(r => attIds(r[photoCol]).length).length}`;
+  $('count').textContent = `${filtered.length} photo${filtered.length > 1 ? 's' : ''} sur ${records.filter(r => attIds(r[photoCol]).length).length} · v4 · ${meta ? meta.length : 0} colonnes lues`;
   $('grid').innerHTML = ''; shown = 0;
   if (!filtered.length) $('grid').innerHTML = `<div class="empty">Aucune photo ne correspond. (${records.length} lignes reçues, colonnes : ${records[0] ? Object.keys(records[0]).filter(k => !k.startsWith('gristHelper_')).join(', ') : 'aucune'})</div>`;
   renderMore();
