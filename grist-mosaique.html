@@ -76,6 +76,7 @@ const $ = id => document.getElementById(id);
 const PAGE = 120;
 let records = [], index = [], filtered = [], shown = 0;
 let tok = null, curRow = null, curImg = 0;
+let tableId = null, meta = null, photoCol = 'Photo', legCol = null, hiddenCols = new Set(), roCols = new Set(), colType = {}, loading = false, again = false;
 
 // ---------- Utilitaires ----------
 const norm = s => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -85,7 +86,7 @@ const url = id => tok ? `${tok.baseUrl}/attachments/${id}/download?auth=${tok.to
 const fmt = v => v instanceof Date ? v.toLocaleString('fr-FR')
   : Array.isArray(v) ? v.filter(x => x !== 'L').join(', ')
   : (v && typeof v === 'object') ? JSON.stringify(v) : (v ?? '');
-const hidden = k => k === 'id' || k === 'Photo' || k === 'manualSort' || k.startsWith('gristHelper_');
+const hidden = k => k === 'id' || k === photoCol || hiddenCols.has(k);
 
 async function refreshToken() {
   try {
@@ -106,28 +107,30 @@ function buildIndex() {
     return norm(parts.join(' '));
   });
 }
-function applyFilter() {
+function applyFilter(keep) {
+  const st = keep ? $('main').scrollTop : 0;
   const terms = norm($('q').value).split(/\s+/).filter(Boolean);
   filtered = [];
   records.forEach((r, i) => {
-    if (!attIds(r.Photo).length) return;
+    if (!attIds(r[photoCol]).length) return;
     if (terms.every(t => index[i].includes(t))) filtered.push(r);
   });
-  $('count').textContent = `${filtered.length} photo${filtered.length > 1 ? 's' : ''} sur ${records.filter(r => attIds(r.Photo).length).length}`;
+  $('count').textContent = `${filtered.length} photo${filtered.length > 1 ? 's' : ''} sur ${records.filter(r => attIds(r[photoCol]).length).length}`;
   $('grid').innerHTML = ''; shown = 0;
-  $('main').scrollTop = 0;
   if (!filtered.length) $('grid').innerHTML = `<div class="empty">Aucune photo ne correspond. (${records.length} lignes reçues, colonnes : ${records[0] ? Object.keys(records[0]).filter(k => !k.startsWith('gristHelper_')).join(', ') : 'aucune'})</div>`;
   renderMore();
+  while (st && shown < filtered.length && $('grid').scrollHeight < st + $('main').clientHeight + 600) renderMore();
+  $('main').scrollTop = st;
 }
 
 // ---------- Rendu progressif ----------
 function renderMore() {
   const frag = document.createDocumentFragment();
   filtered.slice(shown, shown + PAGE).forEach(r => {
-    const id = attIds(r.Photo)[0];
+    const id = attIds(r[photoCol])[0];
     const b = document.createElement('button');
     b.className = 'tile'; b.type = 'button';
-    const cap = r.Legende != null && r.Legende !== '' ? fmt(r.Legende) : '';
+    const cap = r[legCol] != null && r[legCol] !== '' ? fmt(r[legCol]) : '';
     b.innerHTML = `<div class="ph"><img loading="lazy" decoding="async" alt=""></div>${cap ? '<div class="cap"></div>' : ''}`;
     const img = b.querySelector('img'); img.dataset.att = id; img.src = url(id);
     if (cap) { b.querySelector('.cap').textContent = cap; b.title = cap; }
@@ -144,7 +147,7 @@ new IntersectionObserver(es => { if (es[0].isIntersecting && shown < filtered.le
 function openRow(id) {
   curRow = id; curImg = 0;
   const r = records.find(x => x.id === id); if (!r) return closeModal();
-  const ids = attIds(r.Photo);
+  const ids = attIds(r[photoCol]);
   $('big').src = url(ids[curImg]);
   $('strip').innerHTML = ids.length > 1 ? ids.map((a, i) =>
     `<img data-i="${i}" data-att="${a}" src="${url(a)}" class="${i === curImg ? 'cur' : ''}" alt="">`).join('') : '';
@@ -153,7 +156,7 @@ function openRow(id) {
     $('strip').querySelectorAll('img').forEach(x => x.classList.toggle('cur', x === im));
   });
   const pos = filtered.findIndex(x => x.id === id);
-  $('mtitle').textContent = r.Legende ? fmt(r.Legende) : `Ligne ${id}`;
+  $('mtitle').textContent = r[legCol] ? fmt(r[legCol]) : `Ligne ${id}`;
   $('prev').style.display = $('next').style.display = filtered.length > 1 ? '' : 'none';
   buildFields(r);
   $('modal').classList.add('on');
@@ -163,27 +166,27 @@ function buildFields(r) {
   const box = $('fields'); box.innerHTML = '';
   Object.keys(r).filter(k => !hidden(k)).forEach(k => {
     const v = r[k], d = document.createElement('div'); d.className = 'f';
-    const label = k === 'Legende' ? 'Légende' : k;
-    const t = typeof v;
-    if (t === 'string' || t === 'number' || t === 'boolean' || v == null) {
+    const ty = colType[k] || '', t = typeof v;
+    if (!roCols.has(k) && (t === 'string' || t === 'number' || t === 'boolean' || v == null)) {
+      const isNum = /^(Int|Numeric)/.test(ty), isBool = ty === 'Bool';
       const long = t === 'string' && (v.length > 50 || v.includes('\n'));
       d.innerHTML = `<label></label>`;
-      d.firstChild.textContent = label;
+      d.firstChild.textContent = k;
       let inp;
-      if (t === 'boolean') { inp = document.createElement('input'); inp.type = 'checkbox'; inp.checked = v; }
+      if (isBool) { inp = document.createElement('input'); inp.type = 'checkbox'; inp.checked = !!v; }
       else if (long) { inp = document.createElement('textarea'); inp.value = v; inp.rows = 3; }
-      else { inp = document.createElement('input'); inp.type = t === 'number' ? 'number' : 'text'; inp.step = 'any'; inp.value = v ?? ''; }
+      else { inp = document.createElement('input'); inp.type = isNum ? 'number' : 'text'; inp.step = 'any'; inp.value = v ?? ''; }
       inp.addEventListener('change', async () => {
-        let nv = t === 'boolean' ? inp.checked : t === 'number' ? (inp.value === '' ? null : Number(inp.value)) : inp.value;
+        const nv = isBool ? inp.checked : isNum ? (inp.value === '' ? null : Number(inp.value)) : inp.value;
         try {
-          await grist.getTable().update({id: r.id, fields: grist.mapColumnNamesBack({[k]: nv})});
+          await grist.docApi.applyUserActions([['UpdateRecord', tableId, r.id, {[k]: nv}]]);
           d.classList.add('saved'); setTimeout(() => d.classList.remove('saved'), 900);
         } catch (e) { alert('Modification impossible : ' + e.message); }
       });
       d.appendChild(inp);
     } else {
       d.innerHTML = `<label></label><div class="ro"></div>`;
-      d.firstChild.textContent = label + ' (lecture seule)';
+      d.firstChild.textContent = k + ' (lecture seule)';
       d.lastChild.textContent = fmt(v);
     }
     box.appendChild(d);
@@ -214,6 +217,64 @@ let timer;
 $('size').addEventListener('input', e => document.documentElement.style.setProperty('--size', e.target.value + 'px'));
 
 // ---------- Grist ----------
+async function loadMeta() {
+  tableId = await grist.selectedTable.getTableId();
+  const [T, C] = await Promise.all([grist.docApi.fetchTable('_grist_Tables'), grist.docApi.fetchTable('_grist_Tables_column')]);
+  const tid = {}; T.id.forEach((id, i) => tid[id] = T.tableId[i]);
+  const byId = {};
+  C.id.forEach((id, i) => byId[id] = {colId: C.colId[i], type: C.type[i], parent: C.parentId[i], pos: C.parentPos[i],
+    isFormula: C.isFormula[i], formula: C.formula[i], visibleCol: C.visibleCol[i]});
+  meta = Object.values(byId).filter(c => tid[c.parent] === tableId && !c.colId.startsWith('gristHelper_') && c.colId !== 'manualSort')
+    .sort((a, b) => a.pos - b.pos);
+  hiddenCols = new Set(); roCols = new Set(); colType = {};
+  meta.forEach(c => {
+    colType[c.colId] = c.type;
+    if (/^Ref(List)?:/.test(c.type)) { c.target = c.type.split(':')[1]; c.show = c.visibleCol && byId[c.visibleCol] ? byId[c.visibleCol].colId : null; }
+    if (c.type === 'Attachments') hiddenCols.add(c.colId);
+    if (c.target || /^Date/.test(c.type) || c.type === 'Attachments' || (c.isFormula && c.formula)) roCols.add(c.colId);
+  });
+}
+async function load() {
+  if (!meta) await loadMeta();
+  const raw = await grist.docApi.fetchTable(tableId);
+  const refs = {};
+  for (const c of meta) if (c.target && !refs[c.target]) {
+    const t = await grist.docApi.fetchTable(c.target);
+    refs[c.target] = {t, idx: new Map(t.id.map((id, i) => [id, i]))};
+  }
+  const one = (c, v) => {
+    const R = refs[c.target], i = R.idx.get(v);
+    if (i === undefined) return '';
+    return c.show && R.t[c.show] ? String(R.t[c.show][i] ?? '') : String(v);
+  };
+  records = raw.id.map((id, i) => {
+    const r = {id};
+    for (const c of meta) {
+      let v = raw[c.colId] ? raw[c.colId][i] : null;
+      if (c.type.startsWith('RefList:')) v = Array.isArray(v) ? v.filter(x => x !== 'L').map(x => one(c, x)).join(', ') : '';
+      else if (c.target) v = v ? one(c, v) : '';
+      else if (c.type === 'Date' && typeof v === 'number') v = new Date(v * 1000).toLocaleDateString('fr-FR', {timeZone: 'UTC'});
+      else if (/^DateTime/.test(c.type) && typeof v === 'number') v = new Date(v * 1000).toLocaleString('fr-FR');
+      r[c.colId] = v;
+    }
+    return r;
+  });
+}
+async function refresh() {
+  if (loading) { again = true; return; }
+  loading = true;
+  try {
+    await load();
+    buildIndex();
+    applyFilter(true);
+    if (curRow) {
+      if (!records.some(r => r.id === curRow)) closeModal();
+      else if (!/INPUT|TEXTAREA/.test(document.activeElement.tagName)) buildFields(records.find(r => r.id === curRow));
+    }
+  } catch (e) { $('count').textContent = 'Erreur : ' + (e.message || e); $('count').style.color = '#c0392b'; }
+  loading = false;
+  if (again) { again = false; refresh(); }
+}
 grist.ready({
   requiredAccess: 'full',
   columns: [
@@ -221,16 +282,12 @@ grist.ready({
     {name: 'Legende', title: 'Légende (affichée sous l’image)', type: 'Any', optional: true}
   ]
 });
-grist.onRecords(recs => {
-  records = recs || [];
-  buildIndex();
-  applyFilter();
-  if (curRow) { records.some(r => r.id === curRow) ? buildFieldsIfIdle() : closeModal(); }
-}, {includeColumns: 'all'});
-function buildFieldsIfIdle() {
-  // Ne reconstruit pas le formulaire pendant une saisie
-  if (!/INPUT|TEXTAREA/.test(document.activeElement.tagName)) buildFields(records.find(r => r.id === curRow));
-}
+grist.onRecords((recs, mappings) => {
+  if (!mappings) return;
+  photoCol = mappings.Photo || 'Photo';
+  legCol = mappings.Legende || null;
+  refresh();
+});
 refreshToken();
 </script>
 </body>
