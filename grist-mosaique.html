@@ -79,7 +79,8 @@ let tok = null, curRow = null, curImg = 0;
 
 // ---------- Utilitaires ----------
 const norm = s => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-const attIds = v => Array.isArray(v) && v[0] === 'L' ? v.slice(1) : [];
+const attIds = v => Array.isArray(v) ? v.filter(x => typeof x === 'number') : [];
+window.onerror = (m) => { $('count').textContent = 'Erreur : ' + m; $('count').style.color = '#c0392b'; };
 const url = id => tok ? `${tok.baseUrl}/attachments/${id}/download?auth=${tok.token}` : '';
 const fmt = v => v instanceof Date ? v.toLocaleString('fr-FR')
   : Array.isArray(v) ? v.filter(x => x !== 'L').join(', ')
@@ -96,7 +97,14 @@ async function refreshToken() {
 
 // ---------- Index de recherche ----------
 function buildIndex() {
-  index = records.map(r => norm(Object.keys(r).filter(k => !hidden(k)).map(k => fmt(r[k])).join(' ')));
+  index = records.map(r => {
+    let parts = [];
+    for (const k of Object.keys(r)) {
+      if (hidden(k)) continue;
+      try { parts.push(fmt(r[k])); } catch (e) { parts.push(String(r[k])); }
+    }
+    return norm(parts.join(' '));
+  });
 }
 function applyFilter() {
   const terms = norm($('q').value).split(/\s+/).filter(Boolean);
@@ -108,7 +116,7 @@ function applyFilter() {
   $('count').textContent = `${filtered.length} photo${filtered.length > 1 ? 's' : ''} sur ${records.filter(r => attIds(r.Photo).length).length}`;
   $('grid').innerHTML = ''; shown = 0;
   $('main').scrollTop = 0;
-  if (!filtered.length) $('grid').innerHTML = '<div class="empty">Aucune photo ne correspond à la recherche.</div>';
+  if (!filtered.length) $('grid').innerHTML = `<div class="empty">Aucune photo ne correspond. (${records.length} lignes reçues, colonnes : ${records[0] ? Object.keys(records[0]).filter(k => !k.startsWith('gristHelper_')).join(', ') : 'aucune'})</div>`;
   renderMore();
 }
 
@@ -201,7 +209,8 @@ document.addEventListener('keydown', e => {
 
 // ---------- Contrôles ----------
 let timer;
-$('q').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(applyFilter, 120); });
+['input', 'keyup', 'search', 'change'].forEach(ev =>
+  $('q').addEventListener(ev, () => { clearTimeout(timer); timer = setTimeout(applyFilter, 100); }));
 $('size').addEventListener('input', e => document.documentElement.style.setProperty('--size', e.target.value + 'px'));
 
 // ---------- Grist ----------
