@@ -29,7 +29,11 @@ main{flex:1;overflow:auto;padding:12px}
 .box{margin:auto;width:min(1100px,96vw);height:min(760px,94vh);background:var(--card);border-radius:10px;display:flex;overflow:hidden}
 .view{flex:1 1 60%;background:#0c0f0e;display:flex;flex-direction:column;min-width:0;position:relative}
 .view .main{flex:1;display:flex;align-items:center;justify-content:center;min-height:0;padding:8px}
-.view .main img{max-width:100%;max-height:100%;object-fit:contain}
+.view .main{overflow:hidden;touch-action:none;cursor:zoom-in}
+.view .main img{width:100%;height:100%;object-fit:contain;user-select:none;-webkit-user-drag:none;will-change:transform}
+.zoom{position:absolute;top:8px;right:8px;display:flex;gap:6px;z-index:2}
+.zoom button{background:rgba(0,0,0,.55);color:#fff;border:0;min-width:34px;height:34px;border-radius:6px;font-size:16px;cursor:pointer;padding:0 8px}
+.zoom button:hover{background:rgba(0,0,0,.8)}
 .nav{position:absolute;top:50%;transform:translateY(-50%);background:rgba(0,0,0,.5);color:#fff;border:0;width:36px;height:56px;font-size:22px;cursor:pointer;border-radius:6px}
 #prev{left:8px}#next{right:8px}
 .strip{display:flex;gap:6px;padding:6px;overflow-x:auto}
@@ -62,6 +66,7 @@ main{flex:1;overflow:auto;padding:12px}
   <div class="box">
     <div class="view">
       <div class="main"><img id="big" alt=""></div>
+      <div class="zoom"><button id="zout" aria-label="Réduire" title="Réduire">−</button><button id="zfit" title="Adapter à l’espace">Adapter</button><button id="zin" aria-label="Agrandir" title="Agrandir">+</button></div>
       <button class="nav" id="prev" aria-label="Précédent">‹</button>
       <button class="nav" id="next" aria-label="Suivant">›</button>
       <div class="strip" id="strip"></div>
@@ -76,9 +81,10 @@ main{flex:1;overflow:auto;padding:12px}
 <script>
 const $ = id => document.getElementById(id);
 const PAGE = 120;
+const VIEWER_HIDDEN = ['Cat_taille']; // colonnes non affichées dans la visionneuse (restent cherchables)
 let records = [], index = [], filtered = [], shown = 0;
 let tok = null, curRow = null, curImg = 0;
-let refOpts = {}, tableId = null, meta = null, photoCol = 'Photo', legCol = null, hiddenCols = new Set(), roCols = new Set(), colType = {}, loading = false, again = false;
+let choiceOpts = {}, refOpts = {}, tableId = null, meta = null, photoCol = 'Photo', legCol = null, hiddenCols = new Set(), roCols = new Set(), colType = {}, loading = false, again = false;
 
 // ---------- Utilitaires ----------
 const norm = s => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -150,11 +156,11 @@ function openRow(id) {
   curRow = id; curImg = 0;
   const r = records.find(x => x.id === id); if (!r) return closeModal();
   const ids = attIds(r[photoCol]);
-  $('big').src = url(ids[curImg]);
+  $('big').src = url(ids[curImg]); resetZoom();
   $('strip').innerHTML = ids.length > 1 ? ids.map((a, i) =>
     `<img data-i="${i}" data-att="${a}" src="${url(a)}" class="${i === curImg ? 'cur' : ''}" alt="">`).join('') : '';
   $('strip').querySelectorAll('img').forEach(im => im.onclick = () => {
-    curImg = +im.dataset.i; $('big').src = url(im.dataset.att);
+    curImg = +im.dataset.i; $('big').src = url(im.dataset.att); resetZoom();
     $('strip').querySelectorAll('img').forEach(x => x.classList.toggle('cur', x === im));
   });
   const pos = filtered.findIndex(x => x.id === id);
@@ -166,7 +172,7 @@ function openRow(id) {
 }
 function buildFields(r) {
   const box = $('fields'); box.innerHTML = '';
-  Object.keys(r).filter(k => !hidden(k)).forEach(k => {
+  Object.keys(r).filter(k => !hidden(k) && !VIEWER_HIDDEN.includes(k)).forEach(k => {
     const v = r[k], d = document.createElement('div'); d.className = 'f';
     const ty = colType[k] || '', t = typeof v;
     if (ty.startsWith('Ref:') && !roCols.has(k) && refOpts[k]) {
@@ -180,6 +186,23 @@ function buildFields(r) {
       sel.addEventListener('change', async () => {
         try {
           await grist.docApi.applyUserActions([['UpdateRecord', tableId, r.id, {[k]: Number(sel.value)}]]);
+          d.classList.add('saved'); setTimeout(() => d.classList.remove('saved'), 900);
+        } catch (e) { alert('Modification impossible : ' + e.message); }
+      });
+      d.appendChild(sel);
+    } else if (ty === 'Choice' && !roCols.has(k) && choiceOpts[k]) {
+      d.innerHTML = `<label></label>`;
+      d.firstChild.textContent = k;
+      const sel = document.createElement('select');
+      const cur = v == null ? '' : String(v);
+      const list = choiceOpts[k].slice();
+      if (cur && !list.includes(cur)) list.unshift(cur);
+      sel.innerHTML = '<option value=""></option>';
+      list.forEach(c => { const op = document.createElement('option'); op.value = c; op.textContent = c; sel.appendChild(op); });
+      sel.value = cur;
+      sel.addEventListener('change', async () => {
+        try {
+          await grist.docApi.applyUserActions([['UpdateRecord', tableId, r.id, {[k]: sel.value}]]);
           d.classList.add('saved'); setTimeout(() => d.classList.remove('saved'), 900);
         } catch (e) { alert('Modification impossible : ' + e.message); }
       });
@@ -227,6 +250,29 @@ document.addEventListener('keydown', e => {
   if (!typing && e.key === 'ArrowRight') step(1);
 });
 
+// ---------- Zoom de l'image ----------
+let Z = {z: 1, x: 0, y: 0}, drag = null;
+const bigEl = $('big'), stage = document.querySelector('.view .main');
+function applyZoom() {
+  if (Z.z <= 1) Z = {z: 1, x: 0, y: 0};
+  bigEl.style.transform = `translate(${Z.x}px,${Z.y}px) scale(${Z.z})`;
+  stage.style.cursor = Z.z > 1 ? (drag ? 'grabbing' : 'grab') : 'zoom-in';
+}
+function zoomAt(nz, cx, cy) {
+  nz = Math.min(8, Math.max(1, nz));
+  const k = nz / Z.z; Z.x = cx - (cx - Z.x) * k; Z.y = cy - (cy - Z.y) * k; Z.z = nz; applyZoom();
+}
+function resetZoom() { Z = {z: 1, x: 0, y: 0}; applyZoom(); }
+function stagePt(e) { const b = stage.getBoundingClientRect(); return [e.clientX - b.left - b.width / 2, e.clientY - b.top - b.height / 2]; }
+stage.addEventListener('wheel', e => { e.preventDefault(); const [cx, cy] = stagePt(e); zoomAt(Z.z * (e.deltaY < 0 ? 1.2 : 1 / 1.2), cx, cy); }, {passive: false});
+stage.addEventListener('dblclick', e => { const [cx, cy] = stagePt(e); Z.z > 1 ? resetZoom() : zoomAt(2.5, cx, cy); });
+stage.addEventListener('pointerdown', e => { if (Z.z > 1) { drag = {x: e.clientX - Z.x, y: e.clientY - Z.y}; stage.setPointerCapture(e.pointerId); applyZoom(); } });
+stage.addEventListener('pointermove', e => { if (drag) { Z.x = e.clientX - drag.x; Z.y = e.clientY - drag.y; applyZoom(); } });
+stage.addEventListener('pointerup', () => { drag = null; applyZoom(); });
+$('zin').onclick = () => zoomAt(Z.z * 1.4, 0, 0);
+$('zout').onclick = () => zoomAt(Z.z / 1.4, 0, 0);
+$('zfit').onclick = resetZoom;
+
 // ---------- Contrôles ----------
 let timer;
 ['input', 'keyup', 'search', 'change'].forEach(ev =>
@@ -240,12 +286,13 @@ async function loadMeta() {
   const tid = {}; T.id.forEach((id, i) => tid[id] = T.tableId[i]);
   const byId = {};
   C.id.forEach((id, i) => byId[id] = {colId: C.colId[i], type: C.type[i], parent: C.parentId[i], pos: C.parentPos[i],
-    isFormula: C.isFormula[i], formula: C.formula[i], visibleCol: C.visibleCol[i]});
+    isFormula: C.isFormula[i], formula: C.formula[i], wo: C.widgetOptions[i], visibleCol: C.visibleCol[i]});
   meta = Object.values(byId).filter(c => tid[c.parent] === tableId && !c.colId.startsWith('gristHelper_') && c.colId !== 'manualSort')
     .sort((a, b) => a.pos - b.pos);
-  hiddenCols = new Set(); roCols = new Set(); colType = {};
+  hiddenCols = new Set(); roCols = new Set(); colType = {}; choiceOpts = {};
   meta.forEach(c => {
     colType[c.colId] = c.type;
+    if (c.type === 'Choice') { try { const ch = JSON.parse(c.wo || '{}').choices; if (Array.isArray(ch)) choiceOpts[c.colId] = ch; } catch (e) {} }
     if (/^Ref(List)?:/.test(c.type)) { c.target = c.type.split(':')[1]; c.show = c.visibleCol && byId[c.visibleCol] ? byId[c.visibleCol].colId : null; }
     if (c.type === 'Attachments') hiddenCols.add(c.colId);
     if (c.type.startsWith('RefList:') || /^Date/.test(c.type) || c.type === 'Attachments' || (c.isFormula && c.formula)) roCols.add(c.colId);
