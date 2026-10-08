@@ -50,6 +50,10 @@ main{flex:1;overflow:auto;padding:12px}
 .f textarea{resize:vertical;min-height:36px}
 .f .ro{padding:6px 8px;color:var(--mut);background:var(--bg);border-radius:6px;word-break:break-word}
 .f.saved input,.f.saved textarea{border-color:var(--acc)}
+.foot{padding:10px 14px;border-top:1px solid var(--line)}
+.foot button{width:100%;padding:9px 12px;border:0;border-radius:8px;background:var(--acc);color:#fff;font:inherit;font-weight:600;cursor:pointer}
+@media(prefers-color-scheme:dark){.foot button{color:#0c1512}}
+.foot button:hover{filter:brightness(1.1)}
 .x{background:none;border:0;color:var(--fg);font-size:20px;cursor:pointer}
 @media(max-width:700px){.box{flex-direction:column}.side{flex:0 0 45%;max-width:none;border-left:0;border-top:1px solid var(--line)}}
 </style>
@@ -74,6 +78,7 @@ main{flex:1;overflow:auto;padding:12px}
     <div class="side">
       <h2><span id="mtitle"></span><button class="x" id="close" aria-label="Fermer">×</button></h2>
       <div id="fields"></div>
+      <div class="foot"><button id="sel" type="button">Sélectionner dans la table</button></div>
     </div>
   </div>
 </div>
@@ -239,6 +244,12 @@ function step(d) {
 }
 function closeModal() { $('modal').classList.remove('on'); curRow = null; }
 $('close').onclick = closeModal;
+$('sel').onclick = () => {
+  if (!curRow) return;
+  try { grist.setSelectedRows([curRow]); } catch (e) { alert('Sélection impossible : ' + e.message); return; }
+  const b = $('sel'); b.textContent = '✓ Ligne sélectionnée';
+  setTimeout(() => b.textContent = 'Sélectionner dans la table', 1200);
+};
 $('prev').onclick = () => step(-1);
 $('next').onclick = () => step(1);
 $('modal').addEventListener('click', e => { if (e.target === $('modal')) closeModal(); });
@@ -348,6 +359,7 @@ async function refresh() {
 }
 grist.ready({
   requiredAccess: 'full',
+  allowSelectBy: true,
   columns: [
     {name: 'Photo', title: 'Photo', type: 'Attachments'},
     {name: 'Legende', title: 'Légende (affichée sous l’image)', type: 'Any', optional: true}
