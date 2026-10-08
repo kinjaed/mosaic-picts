@@ -6,13 +6,19 @@
 <title>Mosaïque de photos</title>
 <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
 <style>
-:root{--bg:#f6f7f5;--fg:#1d2321;--mut:#6b7570;--card:#fff;--line:#d9dedb;--acc:#1f6f5c;--size:180px}
-@media(prefers-color-scheme:dark){:root{--bg:#171b1a;--fg:#e8ecea;--mut:#98a39e;--card:#222827;--line:#343c3a;--acc:#5fc4a9}}
+:root{--bg:#f6f7f5;--fg:#1d2321;--mut:#6b7570;--card:#fff;--line:#d9dedb;--acc:#1f6f5c;--size:180px;--search:#e3f4e7;--pillbg:#eceef2;--sel:#5b46e5}
+@media(prefers-color-scheme:dark){:root{--bg:#171b1a;--fg:#e8ecea;--mut:#98a39e;--card:#222827;--line:#343c3a;--acc:#5fc4a9;--search:#243a2d;--pillbg:#2a3130;--sel:#a99bff}}
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
 body{background:var(--bg);color:var(--fg);font:14px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;flex-direction:column}
-header{display:flex;gap:12px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line);flex-wrap:wrap}
-#q{flex:1 1 220px;min-width:160px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg);font:inherit}
+header{padding:10px 12px;border-bottom:1px solid var(--line)}
+.bar{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.types{display:flex;flex-wrap:wrap;gap:2px;background:var(--pillbg);border-radius:18px;padding:4px;margin-bottom:10px;max-height:120px;overflow-y:auto}
+.types:empty{display:none}
+.types button{border:0;background:transparent;color:var(--mut);font:inherit;font-weight:600;padding:6px 14px;border-radius:999px;cursor:pointer;white-space:nowrap}
+.types button:hover{color:var(--fg)}
+.types button[aria-pressed=true]{background:var(--card);color:var(--sel);box-shadow:0 1px 3px rgba(0,0,0,.18)}
+#q{flex:1 1 220px;min-width:160px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--search);color:var(--fg);font:inherit}
 #q:focus,button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
 #count{color:var(--mut);white-space:nowrap}
 label.sz{display:flex;gap:6px;align-items:center;color:var(--mut)}
@@ -50,19 +56,18 @@ main{flex:1;overflow:auto;padding:12px}
 .f textarea{resize:vertical;min-height:36px}
 .f .ro{padding:6px 8px;color:var(--mut);background:var(--bg);border-radius:6px;word-break:break-word}
 .f.saved input,.f.saved textarea{border-color:var(--acc)}
-.foot{padding:10px 14px;border-top:1px solid var(--line)}
-.foot button{width:100%;padding:9px 12px;border:0;border-radius:8px;background:var(--acc);color:#fff;font:inherit;font-weight:600;cursor:pointer}
-@media(prefers-color-scheme:dark){.foot button{color:#0c1512}}
-.foot button:hover{filter:brightness(1.1)}
 .x{background:none;border:0;color:var(--fg);font-size:20px;cursor:pointer}
 @media(max-width:700px){.box{flex-direction:column}.side{flex:0 0 45%;max-width:none;border-left:0;border-top:1px solid var(--line)}}
 </style>
 </head>
 <body>
 <header>
+  <div id="types" class="types" role="group" aria-label="Sélection rapide par type"></div>
+  <div class="bar">
   <input id="q" type="search" placeholder="Rechercher dans toutes les colonnes…" autocomplete="off">
   <span id="count"></span>
   <label class="sz">Taille <input id="size" type="range" min="100" max="400" value="180"></label>
+  </div>
 </header>
 <main id="main"><div id="grid"></div><div id="more"></div></main>
 
@@ -78,7 +83,6 @@ main{flex:1;overflow:auto;padding:12px}
     <div class="side">
       <h2><span id="mtitle"></span><button class="x" id="close" aria-label="Fermer">×</button></h2>
       <div id="fields"></div>
-      <div class="foot"><button id="sel" type="button">Sélectionner dans la table</button></div>
     </div>
   </div>
 </div>
@@ -86,10 +90,12 @@ main{flex:1;overflow:auto;padding:12px}
 <script>
 const $ = id => document.getElementById(id);
 const PAGE = 120;
-const VIEWER_HIDDEN = ['Cat_taille']; // colonnes non affichées dans la visionneuse (restent cherchables)
+const TYPE_COL = 'Type';                 // colonne utilisée pour la sélection rapide
+const FORCE_READONLY = ['Type', 'Marque']; // colonnes en lecture seule dans la visionneuse
+const VIEWER_HIDDEN = ['Cat_taille', 'Select']; // colonnes non affichées dans la visionneuse (restent cherchables)
 let records = [], index = [], filtered = [], shown = 0;
 let tok = null, curRow = null, curImg = 0;
-let choiceOpts = {}, refOpts = {}, tableId = null, meta = null, photoCol = 'Photo', legCol = null, hiddenCols = new Set(), roCols = new Set(), colType = {}, loading = false, again = false;
+let typeSel = '', choiceOpts = {}, refOpts = {}, tableId = null, meta = null, photoCol = 'Photo', legCol = null, hiddenCols = new Set(), roCols = new Set(), colType = {}, loading = false, again = false;
 
 // ---------- Utilitaires ----------
 const norm = s => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -126,6 +132,7 @@ function applyFilter(keep) {
   filtered = [];
   records.forEach((r, i) => {
     if (!attIds(r[photoCol]).length) return;
+    if (typeSel && String(r[TYPE_COL] ?? '') !== typeSel) return;
     if (terms.every(t => index[i].includes(t))) filtered.push(r);
   });
   $('count').textContent = `${filtered.length} photo${filtered.length > 1 ? 's' : ''} sur ${records.filter(r => attIds(r[photoCol]).length).length}`;
@@ -135,6 +142,28 @@ function applyFilter(keep) {
   while (st && shown < filtered.length && $('grid').scrollHeight < st + $('main').clientHeight + 600) renderMore();
   $('main').scrollTop = st;
 }
+
+// ---------- Sélection rapide par type ----------
+function buildTypes() {
+  const box = $('types');
+  const vals = [...new Set(records.filter(r => attIds(r[photoCol]).length).map(r => String(r[TYPE_COL] ?? '')).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'fr', {numeric: true}));
+  if (!vals.length) { box.innerHTML = ''; return; }
+  if (typeSel && !vals.includes(typeSel)) typeSel = '';
+  box.innerHTML = '';
+  ['', ...vals].forEach(v => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.textContent = v || 'Tous'; b.dataset.v = v;
+    b.setAttribute('aria-pressed', String(v === typeSel));
+    box.appendChild(b);
+  });
+}
+$('types').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  typeSel = b.dataset.v;
+  $('types').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  applyFilter();
+});
 
 // ---------- Rendu progressif ----------
 function renderMore() {
@@ -244,12 +273,6 @@ function step(d) {
 }
 function closeModal() { $('modal').classList.remove('on'); curRow = null; }
 $('close').onclick = closeModal;
-$('sel').onclick = () => {
-  if (!curRow) return;
-  try { grist.setSelectedRows([curRow]); } catch (e) { alert('Sélection impossible : ' + e.message); return; }
-  const b = $('sel'); b.textContent = '✓ Ligne sélectionnée';
-  setTimeout(() => b.textContent = 'Sélectionner dans la table', 1200);
-};
 $('prev').onclick = () => step(-1);
 $('next').onclick = () => step(1);
 $('modal').addEventListener('click', e => { if (e.target === $('modal')) closeModal(); });
@@ -308,6 +331,7 @@ async function loadMeta() {
     if (c.type === 'Attachments') hiddenCols.add(c.colId);
     if (c.type.startsWith('RefList:') || /^Date/.test(c.type) || c.type === 'Attachments' || (c.isFormula && c.formula)) roCols.add(c.colId);
   });
+  FORCE_READONLY.forEach(k => { if (colType[k]) roCols.add(k); });
 }
 async function load() {
   if (!meta) await loadMeta();
@@ -348,6 +372,7 @@ async function refresh() {
   try {
     await load();
     buildIndex();
+    buildTypes();
     applyFilter(true);
     if (curRow) {
       if (!records.some(r => r.id === curRow)) closeModal();
