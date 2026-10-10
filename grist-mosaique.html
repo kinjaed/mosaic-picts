@@ -95,9 +95,10 @@ const FORCE_READONLY = ['Type', 'Marque']; // colonnes en lecture seule dans la 
 const VIEWER_HIDDEN = ['Cat_taille', 'Select']; // colonnes non affichées dans la visionneuse (restent cherchables)
 let records = [], index = [], filtered = [], shown = 0;
 let tok = null, curRow = null, curImg = 0;
-let typeSel = '', choiceOpts = {}, refOpts = {}, tableId = null, meta = null, photoCol = 'Photo', legCol = null, hiddenCols = new Set(), roCols = new Set(), colType = {}, loading = false, again = false;
+let hideCol = null, typeSel = '', choiceOpts = {}, refOpts = {}, tableId = null, meta = null, photoCol = 'Photo', legCol = null, hiddenCols = new Set(), roCols = new Set(), colType = {}, loading = false, again = false;
 
 // ---------- Utilitaires ----------
+const visible = r => attIds(r[photoCol]).length > 0 && !(hideCol && r[hideCol] === true);
 const norm = s => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 const attIds = v => Array.isArray(v) ? v.filter(x => typeof x === 'number') : [];
 window.onerror = (m) => { $('count').textContent = 'Erreur : ' + m; $('count').style.color = '#c0392b'; };
@@ -131,11 +132,11 @@ function applyFilter(keep) {
   const terms = norm($('q').value).split(/\s+/).filter(Boolean);
   filtered = [];
   records.forEach((r, i) => {
-    if (!attIds(r[photoCol]).length) return;
+    if (!visible(r)) return;
     if (typeSel && String(r[TYPE_COL] ?? '') !== typeSel) return;
     if (terms.every(t => index[i].includes(t))) filtered.push(r);
   });
-  $('count').textContent = `${filtered.length} photo${filtered.length > 1 ? 's' : ''} sur ${records.filter(r => attIds(r[photoCol]).length).length}`;
+  $('count').textContent = `${filtered.length} photo${filtered.length > 1 ? 's' : ''} sur ${records.filter(visible).length}`;
   $('grid').innerHTML = ''; shown = 0;
   if (!filtered.length) $('grid').innerHTML = `<div class="empty">Aucune photo ne correspond. (${records.length} lignes reçues, colonnes : ${records[0] ? Object.keys(records[0]).filter(k => !k.startsWith('gristHelper_')).join(', ') : 'aucune'})</div>`;
   renderMore();
@@ -146,7 +147,7 @@ function applyFilter(keep) {
 // ---------- Sélection rapide par type ----------
 function buildTypes() {
   const box = $('types');
-  const vals = [...new Set(records.filter(r => attIds(r[photoCol]).length).map(r => String(r[TYPE_COL] ?? '')).filter(Boolean))]
+  const vals = [...new Set(records.filter(visible).map(r => String(r[TYPE_COL] ?? '')).filter(Boolean))]
     .sort((a, b) => a.localeCompare(b, 'fr', {numeric: true}));
   if (!vals.length) { box.innerHTML = ''; return; }
   if (typeSel && !vals.includes(typeSel)) typeSel = '';
@@ -387,6 +388,7 @@ grist.ready({
   allowSelectBy: true,
   columns: [
     {name: 'Photo', title: 'Photo', type: 'Attachments'},
+    {name: 'Masquer', title: 'NE PAS AFFICHER (colonne booléenne)', type: 'Bool', optional: true},
     {name: 'Legende', title: 'Légende (affichée sous l’image)', type: 'Any', optional: true}
   ]
 });
@@ -394,6 +396,7 @@ grist.onRecords((recs, mappings) => {
   if (!mappings) return;
   photoCol = mappings.Photo || 'Photo';
   legCol = mappings.Legende || null;
+  hideCol = mappings.Masquer || null;
   refresh();
 });
 refreshToken();
