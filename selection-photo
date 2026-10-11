@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Choix de catégorie</title>
+<script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+<style>
+  :root {
+    --bg: #ffffff;
+    --surface: #f7f7f7;
+    --border: #dcdcdc;
+    --text: #262633;
+    --muted: #8a8a9e;
+    --accent: #16b378;
+    --danger: #d0021b;
+    --radius: 999px;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 13px;
+  }
+  body {
+    display: flex;
+    align-items: flex-start;
+    padding: 6px 8px;
+  }
+
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; }
+
+  button.choice {
+    font: inherit;
+    padding: 4px 14px;
+    border: 1.5px solid var(--chip-fill, var(--border));
+    border-radius: var(--radius);
+    background: var(--bg);
+    color: var(--chip-fill, var(--text));
+    cursor: pointer;
+    transition: background 0.1s ease, border-color 0.1s ease, color 0.1s ease;
+  }
+  button.choice:hover:not(:disabled) { background: var(--surface); }
+  button.choice:disabled { opacity: 0.45; cursor: default; }
+  button.choice.active {
+    background: var(--chip-fill, var(--accent));
+    border-color: var(--chip-fill, var(--accent));
+    color: var(--chip-text, #fff);
+    font-weight: 600;
+  }
+
+  .hint {
+    color: var(--muted);
+    font-size: 12px;
+    padding: 4px 2px;
+  }
+  .hint.error { color: var(--danger); }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #32323f;
+      --surface: #3b3b4a;
+      --border: #57576b;
+      --text: #efefef;
+      --muted: #a4a4b6;
+    }
+  }
+
+  /* ---- Cadres : choix (gris clair) / actions (gris foncé) ---- */
+  :root {
+    --panel-a: #ececf1; --panel-b: #5c5c6a; --edge: #9b9bac;
+    --save: #d93a3a; --hist: #2f6fed;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --panel-a: #3b3b4a; --panel-b: #1f1f29; --edge: #6d6d82; }
+  }
+  .wrap { display: flex; gap: 8px; width: 100%; height: 100%; align-items: stretch; }
+  .panel { border-radius: 14px; padding: 8px 10px; }
+  .panel.choices { flex: 1; min-width: 0; background: var(--panel-a); overflow-y: auto; }
+  .panel.actions { flex: none; background: var(--panel-b); display: flex; flex-direction: column; gap: 8px; justify-content: center; }
+  .act {
+    font: inherit; font-weight: 600; padding: 6px 18px; color: #fff; cursor: pointer;
+    border: 1.5px solid var(--edge); border-radius: 999px; transition: filter .12s ease, transform .05s ease;
+  }
+  .act:hover:not(:disabled) { filter: brightness(1.1); }
+  .act:active:not(:disabled) { transform: translateY(1px); }
+  .act:disabled { opacity: .5; cursor: default; }
+  .act.save { background: var(--save); }
+  .act.hist { background: var(--hist); }
+
+  /* ---- Fenêtre Historique ---- */
+  .overlay {
+    position: fixed; inset: 0; z-index: 50; display: none; align-items: center; justify-content: center;
+    padding: 10px; background: rgba(18, 18, 30, .55); backdrop-filter: blur(3px);
+  }
+  .overlay.on { display: flex; }
+  .dlg {
+    width: min(1000px, 100%); height: min(660px, 100%); display: flex; flex-direction: column; overflow: hidden;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 18px; box-shadow: 0 24px 60px rgba(0, 0, 0, .35);
+  }
+  .dlg-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; border-bottom: 1px solid var(--border); }
+  .dlg-head h2 { margin: 0; font-size: 14px; letter-spacing: .12em; text-transform: uppercase; }
+  .xbtn { border: 0; background: var(--surface); color: var(--text); width: 30px; height: 30px; border-radius: 50%; font-size: 18px; line-height: 1; cursor: pointer; }
+  .xbtn:hover { background: var(--border); }
+  .dlg-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(200px, 290px) 1fr; gap: 16px; padding: 14px 18px; overflow: auto; }
+  .left { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+  .field { display: flex; align-items: center; gap: 10px; }
+  .field label { width: 52px; color: var(--muted); font-weight: 600; }
+  .field select {
+    flex: 1; min-width: 0; padding: 7px 10px; font: inherit; color: var(--text);
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  }
+  .dates { flex: 1; min-height: 140px; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .dates-head, .pv-head { padding: 9px 14px; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--border); }
+  #dateList { flex: 1; overflow-y: auto; padding: 4px; }
+  .date { display: block; width: 100%; text-align: left; font: inherit; color: var(--text); background: transparent; border: 0; border-radius: 8px; padding: 7px 10px; cursor: pointer; }
+  .date:hover { background: var(--border); }
+  .date[aria-selected="true"] { background: var(--accent); color: #fff; font-weight: 600; }
+  .empty { color: var(--muted); padding: 16px; text-align: center; }
+  .preview { display: flex; flex-direction: column; min-height: 260px; min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .pv-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .pv-head input[type=range] { width: 150px; accent-color: var(--accent); }
+  #pvBody { flex: 1; overflow: auto; padding: 14px; display: flex; flex-wrap: wrap; gap: 12px; align-content: flex-start; align-items: flex-start; }
+  figure.ph { position: relative; margin: 0; border-radius: 12px; overflow: hidden; background: var(--border); box-shadow: 0 2px 8px rgba(0, 0, 0, .18); }
+  figure.ph img { display: block; height: var(--th, 160px); width: auto; }
+  figure.ph .none { display: flex; align-items: center; justify-content: center; height: var(--th, 160px); width: calc(var(--th, 160px) * .75); color: var(--muted); font-size: 12px; text-align: center; padding: 8px; }
+  figure.ph figcaption { position: absolute; left: 8px; bottom: 8px; max-width: calc(100% - 16px); padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: rgba(20, 20, 30, .72); color: #fff; }
+  .dlg-foot { display: flex; justify-content: space-between; padding: 12px 18px; border-top: 1px solid var(--border); background: var(--surface); }
+  .btn { font: inherit; font-weight: 600; padding: 8px 24px; border-radius: 999px; cursor: pointer; border: 1.5px solid var(--border); }
+  .btn.ghost { background: transparent; color: var(--text); }
+  .btn.ghost:hover { background: var(--border); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover:not(:disabled) { filter: brightness(1.08); }
+  .btn:disabled { opacity: .45; cursor: default; }
+  body.win { display: block; padding: 0; }
+  .win .overlay { padding: 0; background: var(--bg); backdrop-filter: none; }
+  .win .dlg { width: 100%; height: 100%; border: 0; border-radius: 0; box-shadow: none; }
+  @media (max-width: 640px) {
+    .dlg-body { grid-template-columns: 1fr; }
+    .dates { max-height: 200px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <section class="panel choices">
+    <div id="bar" class="bar">
+      <span class="hint" id="hint">Chargement…</span>
+    </div>
+  </section>
+  <aside class="panel actions">
+    <button id="save" class="act save" type="button" title="Enregistrer l'état actuel dans la table Historique">Enregistrer</button>
+    <button id="hist" class="act hist" type="button" title="Consulter et restaurer un enregistrement">Historique</button>
+  </aside>
+</div>
+
+<div id="overlay" class="overlay" role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
+  <div class="dlg">
+    <div class="dlg-head">
+      <h2 id="dlgTitle">Historique</h2>
+      <button id="hClose" class="xbtn" type="button" aria-label="Fermer">×</button>
+    </div>
+    <div class="dlg-body">
+      <div class="left">
+        <div class="field"><label for="yearSel">Année</label><select id="yearSel"></select></div>
+        <div class="field"><label for="monthSel">Mois</label><select id="monthSel"></select></div>
+        <div class="dates">
+          <div class="dates-head">Date</div>
+          <div id="dateList" role="listbox"></div>
+        </div>
+      </div>
+      <div class="preview">
+        <div class="pv-head"><span>Aperçu</span><input id="thSize" type="range" min="80" max="360" value="160" aria-label="Taille des vignettes"></div>
+        <div id="pvBody"></div>
+      </div>
+    </div>
+    <div class="dlg-foot">
+      <button id="hCancel" class="btn ghost" type="button">Annuler</button>
+      <button id="hApply" class="btn primary" type="button" disabled>Sélectionner</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var el = { bar: document.getElementById("bar"), save: document.getElementById("save") };
+  var HIST_TABLE = "Historique"; // table d'historique (créée automatiquement)
+
+  var CHOICES = [];       // valeurs autorisées, lues depuis la colonne Choix
+  var CHOICE_COLORS = {}; // { "Haut": { fill: "#...", text: "#..." }, ... }
+  var choicesLoaded = false;
+
+  var photoColumn = null;   // colonne de pièces jointes (aperçu de l'historique)
+  var choiceColumn = null;  // nom réel de la colonne mappée
+  var currentRowId = null;  // ligne actuellement sélectionnée dans la vue liée
+  var currentValue = null;  // valeur actuelle de cette ligne pour la colonne Choix
+  var busy = false;         // empêche les doubles clics pendant une écriture
+
+  function setHint(text, isError) {
+    el.bar.innerHTML = '<span class="hint' + (isError ? ' error' : '') + '">' + text + '</span>';
+  }
+
+  function fieldsWith(col, value) {
+    var f = {};
+    f[col] = value;
+    return f;
+  }
+
+  /* -----------------------------------------------------------
+     Valeurs autorisées lues depuis la définition de la colonne à
+     choix unique dans le document (mêmes valeurs que dans Grist),
+     avec repli sur les valeurs déjà présentes dans les données.
+     ----------------------------------------------------------- */
+  async function loadChoices() {
+    if (choicesLoaded || !choiceColumn) { return; }
+
+    try {
+      var tableId = await grist.getSelectedTableId();
+      var tablesMeta = await grist.docApi.fetchTable("_grist_Tables");
+      var tIdx = tablesMeta.tableId.indexOf(tableId);
+      var tableRowId = tIdx !== -1 ? tablesMeta.id[tIdx] : null;
+
+      var colsMeta = await grist.docApi.fetchTable("_grist_Tables_column");
+      var found = null;
+      for (var i = 0; i < colsMeta.colId.length; i++) {
+        if (colsMeta.colId[i] === choiceColumn && colsMeta.parentId[i] === tableRowId) {
+          found = colsMeta.widgetOptions[i];
+          break;
+        }
+      }
+
+      if (found) {
+        var opts = JSON.parse(found || "{}");
+        if (Array.isArray(opts.choices) && opts.choices.length) {
+          CHOICES = opts.choices;
+          choicesLoaded = true;
+        }
+        if (opts.choiceOptions) {
+          Object.keys(opts.choiceOptions).forEach(function (name) {
+            var o = opts.choiceOptions[name] || {};
+            CHOICE_COLORS[name] = { fill: o.fillColor, text: o.textColor };
+          });
+        }
+      }
+    } catch (e) {
+      // Repli ci-dessous si la lecture des métadonnées échoue.
+    }
+
+    if (!choicesLoaded) {
+      try {
+        var tableId2 = await grist.getSelectedTableId();
+        var data = await grist.docApi.fetchTable(tableId2);
+        var col = data[choiceColumn] || [];
+        var seen = {};
+        var fallback = [];
+        col.forEach(function (v) {
+          if (v && !seen[v]) { seen[v] = true; fallback.push(v); }
+        });
+        if (fallback.length) {
+          CHOICES = fallback;
+          choicesLoaded = true;
+        }
+      } catch (e) { /* rien à afficher pour l'instant */ }
+    }
+  }
+
+  function render() {
+    if (!choiceColumn) {
+      setHint("Associez la colonne à choix unique dans le panneau de droite");
+      return;
+    }
+    if (!choicesLoaded || !CHOICES.length) {
+      setHint("Lecture des catégories…");
+      return;
+    }
+
+    el.bar.innerHTML = "";
+
+    if (currentRowId == null) {
+      setHint("Sélectionnez une ligne dans le tableau lié");
+      return;
+    }
+
+    CHOICES.forEach(function (choice) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "choice" + (choice === currentValue ? " active" : "");
+      btn.textContent = choice;
+      btn.disabled = busy;
+
+      var colors = CHOICE_COLORS[choice];
+      if (colors && colors.fill) { btn.style.setProperty("--chip-fill", colors.fill); }
+      if (colors && colors.text) { btn.style.setProperty("--chip-text", colors.text); }
+
+      btn.addEventListener("click", function () { applyChoice(choice); });
+      el.bar.appendChild(btn);
+    });
+  }
+
+  /* -----------------------------------------------------------
+     Applique la catégorie cliquée à la ligne sélectionnée, et
+     retire cette même valeur de toute autre ligne qui la portait
+     déjà, pour qu'une seule ligne à la fois représente chaque
+     catégorie.
+     ----------------------------------------------------------- */
+  async function applyChoice(value) {
+    if (!choiceColumn || currentRowId == null || busy || value === currentValue) { return; }
+
+    busy = true;
+    render();
+
+    try {
+      var tableId = await grist.getSelectedTableId();
+      var data = await grist.docApi.fetchTable(tableId);
+      var col = data[choiceColumn] || [];
+
+      for (var i = 0; i < col.length; i++) {
+        if (col[i] === value && data.id[i] !== currentRowId) {
+          await grist.selectedTable.update({ id: data.id[i], fields: fieldsWith(choiceColumn, null) });
+        }
+      }
+
+      await grist.selectedTable.update({ id: currentRowId, fields: fieldsWith(choiceColumn, value) });
+      currentValue = value;
+    } catch (e) {
+      setHint("Échec de l'enregistrement : " + (e && e.message ? e.message : e), true);
+      busy = false;
+      return;
+    }
+
+    busy = false;
+    render();
+  }
+
+  /* -----------------------------------------------------------
+     Historique : enregistre, à la date du jour, l'ID de la ligne
+     qui porte chaque choix (une colonne par choix) dans la table
+     « Historique », créée automatiquement au premier clic.
+     ----------------------------------------------------------- */
+  function dayEpoch() {
+    var d = new Date();
+    return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 1000;
+  }
+
+  async function histCols() {
+    var T = await grist.docApi.fetchTable("_grist_Tables");
+    var C = await grist.docApi.fetchTable("_grist_Tables_column");
+    var ref = null;
+    for (var i = 0; i < T.id.length; i++) { if (T.tableId[i] === HIST_TABLE) { ref = T.id[i]; } }
+    if (ref === null) { return null; }
+    var cols = {};
+    for (var j = 0; j < C.id.length; j++) {
+      if (C.parentId[j] === ref && C.colId[j].indexOf("gristHelper_") !== 0 && C.colId[j] !== "manualSort") {
+        cols[C.label[j]] = { colId: C.colId[j], type: C.type[j] };
+      }
+    }
+    return cols;
+  }
+
+  async function saveHistory() {
+    if (!choiceColumn || !choicesLoaded || !CHOICES.length) {
+      alert("Associez d'abord la colonne à choix unique dans le panneau de droite.");
+      return;
+    }
+    el.save.disabled = true;
+    try {
+      var tableId = await grist.getSelectedTableId();
+      var data = await grist.docApi.fetchTable(tableId);
+      var col = data[choiceColumn] || [];
+
+      var cols = await histCols();
+      if (!cols) {
+        await grist.docApi.applyUserActions([["AddTable", HIST_TABLE, [{ id: "Date", label: "Date", type: "Date" }]]]);
+        cols = await histCols();
+      }
+      if (!cols.Date) {
+        await grist.docApi.applyUserActions([["AddColumn", HIST_TABLE, "Date", { type: "Date", label: "Date" }]]);
+        cols = await histCols();
+      }
+      var missing = CHOICES.filter(function (c) { return !cols[c]; });
+      if (missing.length) {
+        await grist.docApi.applyUserActions(missing.map(function (c) {
+          return ["AddColumn", HIST_TABLE, c, { type: "Ref:" + tableId, label: c }];
+        }));
+        cols = await histCols();
+      }
+
+      var day = dayEpoch();
+      var fields = {};
+      fields[cols.Date.colId] = day;
+      CHOICES.forEach(function (c) {
+        var idx = col.indexOf(c);
+        if (cols[c]) { fields[cols[c].colId] = idx === -1 ? 0 : data.id[idx]; }
+      });
+
+      var raw = await grist.docApi.fetchTable(HIST_TABLE);
+      var dates = raw[cols.Date.colId] || [];
+      var existing = dates.indexOf(day);
+      if (existing !== -1) {
+        if (!confirm("Un enregistrement existe déjà pour aujourd'hui. Le remplacer ?")) {
+          el.save.disabled = false;
+          return;
+        }
+        await grist.docApi.applyUserActions([["UpdateRecord", HIST_TABLE, raw.id[existing], fields]]);
+      } else {
+        await grist.docApi.applyUserActions([["AddRecord", HIST_TABLE, null, fields]]);
+      }
+      el.save.textContent = "✓ Enregistré";
+      setTimeout(function () { el.save.textContent = "Enregistrer"; }, 1500);
+    } catch (e) {
+      alert("Enregistrement impossible : " + (e && e.message ? e.message : e));
+    }
+    el.save.disabled = false;
+  }
+
+  el.save.addEventListener("click", saveHistory);
+
+  /* -----------------------------------------------------------
+     Fenêtre Historique : liste des dates (filtre année / mois) et
+     aperçu des photos. « Sélectionner » réapplique les choix de
+     l'enregistrement aux lignes correspondantes (par leur ID).
+     ----------------------------------------------------------- */
+  var D = document, W = window, popup = null; // document / fenêtre où s'affiche l'historique
+  function $(id) { return D.getElementById(id); }
+  var H = { entries: [], sel: null, data: null, idx: {}, tok: null, tableId: null };
+
+  function fmtDate(e) {
+    return new Date(e * 1000).toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" });
+  }
+  function yearOf(e) { return new Date(e * 1000).getUTCFullYear(); }
+  function monthOf(e) { return new Date(e * 1000).getUTCMonth(); }
+  function monthName(m) {
+    var n = new Date(Date.UTC(2000, m, 1)).toLocaleDateString("fr-FR", { month: "long", timeZone: "UTC" });
+    return n.charAt(0).toUpperCase() + n.slice(1);
+  }
+  function firstAttachment(v) {
+    if (!Array.isArray(v)) { return null; }
+    for (var i = 0; i < v.length; i++) { if (typeof v[i] === "number") { return v[i]; } }
+    return null;
+  }
+  function attUrl(id) {
+    return H.tok ? H.tok.baseUrl + "/attachments/" + id + "/download?auth=" + H.tok.token : "";
+  }
+  function option(value, label) {
+    var o = document.createElement("option");
+    o.value = value; o.textContent = label;
+    return o;
+  }
+
+  function closeHistory() {
+    var p = popup;
+    popup = null; D = document; W = window;
+    $("overlay").classList.remove("on");
+    if (p && !p.closed) { try { p.close(); } catch (e) { /* ignoré */ } }
+  }
+
+  async function openHistory() {
+    if (popup && !popup.closed) { popup.focus(); return; }
+    if (!choiceColumn || !choicesLoaded || !CHOICES.length) {
+      W.alert("Associez d'abord la colonne à choix unique dans le panneau de droite.");
+      return;
+    }
+    // Fenêtre séparée (doit être ouverte pendant le clic, avant tout traitement asynchrone)
+    var w = null;
+    try { w = window.open("", "gristHistorique", "width=1040,height=720,resizable=yes,scrollbars=yes"); } catch (e) { w = null; }
+    D = document; W = window;
+    if (w) {
+      try {
+        var markup = document.getElementById("overlay").outerHTML;
+        w.document.open();
+        w.document.write('<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Historique</title></head><body class="win"></body></html>');
+        w.document.close();
+        w.document.head.appendChild(w.document.importNode(document.querySelector("style"), true));
+        w.document.body.innerHTML = markup;
+        popup = w; D = w.document; W = w;
+        w.addEventListener("beforeunload", function () { if (popup === w) { popup = null; D = document; W = window; } });
+      } catch (e) {
+        try { w.close(); } catch (e2) { /* ignoré */ }
+        popup = null; D = document; W = window;
+      }
+    }
+    bindUi();
+    $("overlay").classList.add("on");
+    $("dateList").innerHTML = '<div class="empty">Chargement…</div>';
+    $("pvBody").innerHTML = "";
+    $("hApply").disabled = true;
+    try {
+      H.tableId = await grist.getSelectedTableId();
+      H.tok = await grist.docApi.getAccessToken({ readOnly: true });
+      H.data = await grist.docApi.fetchTable(H.tableId);
+      H.idx = {};
+      H.data.id.forEach(function (id, i) { H.idx[id] = i; });
+      H.entries = [];
+      var cols = await histCols();
+      if (cols && cols.Date) {
+        var raw = await grist.docApi.fetchTable(HIST_TABLE);
+        (raw[cols.Date.colId] || []).forEach(function (d, i) {
+          if (typeof d !== "number") { return; }
+          var ids = {};
+          CHOICES.forEach(function (c) { if (cols[c]) { ids[c] = (raw[cols[c].colId] || [])[i] || 0; } });
+          H.entries.push({ rowId: raw.id[i], date: d, ids: ids });
+        });
+        H.entries.sort(function (a, b) { return b.date - a.date; });
+      }
+    } catch (e) {
+      $("dateList").innerHTML = "";
+      var err = document.createElement("div");
+      err.className = "empty"; err.textContent = "Lecture impossible : " + (e && e.message ? e.message : e);
+      $("dateList").appendChild(err);
+      return;
+    }
+    H.sel = null;
+    buildYears();
+  }
+
+  function buildYears() {
+    var ys = [];
+    H.entries.forEach(function (e) { var y = yearOf(e.date); if (ys.indexOf(y) === -1) { ys.push(y); } });
+    ys.sort(function (a, b) { return b - a; });
+    var sel = $("yearSel");
+    sel.innerHTML = "";
+    sel.appendChild(option("", "Toutes"));
+    ys.forEach(function (y) { sel.appendChild(option(String(y), String(y))); });
+    buildMonths();
+  }
+
+  function buildMonths() {
+    var y = $("yearSel").value, keep = $("monthSel").value, ms = [];
+    H.entries.forEach(function (e) {
+      if (y && String(yearOf(e.date)) !== y) { return; }
+      var m = monthOf(e.date); if (ms.indexOf(m) === -1) { ms.push(m); }
+    });
+    ms.sort(function (a, b) { return a - b; });
+    var sel = $("monthSel");
+    sel.innerHTML = "";
+    sel.appendChild(option("", "Tous"));
+    ms.forEach(function (m) { sel.appendChild(option(String(m), monthName(m))); });
+    sel.value = ms.indexOf(Number(keep)) !== -1 && keep !== "" ? keep : "";
+    refreshList();
+  }
+
+  function filteredEntries() {
+    var y = $("yearSel").value, m = $("monthSel").value;
+    return H.entries.filter(function (e) {
+      return (!y || String(yearOf(e.date)) === y) && (m === "" || String(monthOf(e.date)) === m);
+    });
+  }
+
+  function refreshList() {
+    var list = filteredEntries(), box = $("dateList");
+    if (list.indexOf(H.sel) === -1) { H.sel = list[0] || null; }
+    box.innerHTML = "";
+    if (!list.length) {
+      box.innerHTML = '<div class="empty">Aucun enregistrement.</div>';
+    }
+    list.forEach(function (e) {
+      var b = document.createElement("button");
+      b.type = "button"; b.className = "date"; b.setAttribute("role", "option");
+      b.setAttribute("aria-selected", String(e === H.sel));
+      b.textContent = fmtDate(e.date);
+      b.addEventListener("click", function () {
+        H.sel = e;
+        box.querySelectorAll(".date").forEach(function (x) { x.setAttribute("aria-selected", String(x === b)); });
+        renderPreview();
+      });
+      box.appendChild(b);
+      if (e === H.sel) { setTimeout(function () { b.scrollIntoView({ block: "nearest" }); }, 0); }
+    });
+    renderPreview();
+  }
+
+  function renderPreview() {
+    var body = $("pvBody");
+    body.innerHTML = "";
+    $("hApply").disabled = !H.sel;
+    if (!H.sel) { return; }
+    var shown = 0;
+    CHOICES.forEach(function (c) {
+      var id = H.sel.ids[c];
+      if (!id || H.idx[id] === undefined) { return; }
+      shown++;
+      var fig = document.createElement("figure");
+      fig.className = "ph";
+      var att = photoColumn ? firstAttachment((H.data[photoColumn] || [])[H.idx[id]]) : null;
+      if (att) {
+        var img = document.createElement("img");
+        img.loading = "lazy"; img.decoding = "async"; img.alt = c; img.src = attUrl(att);
+        fig.appendChild(img);
+      } else {
+        var none = document.createElement("div");
+        none.className = "none";
+        none.textContent = photoColumn ? "Pas de photo" : "Associez la colonne Photo";
+        fig.appendChild(none);
+      }
+      var cap = document.createElement("figcaption");
+      cap.textContent = c;
+      var colors = CHOICE_COLORS[c];
+      if (colors && colors.fill) { cap.style.background = colors.fill; cap.style.color = colors.text || "#fff"; }
+      fig.appendChild(cap);
+      body.appendChild(fig);
+    });
+    if (!shown) { body.innerHTML = '<div class="empty" style="width:100%">Aucune ligne associée à cet enregistrement.</div>'; }
+  }
+
+  async function applyHistory() {
+    var e = H.sel;
+    if (!e) { return; }
+    var btn = $("hApply");
+    btn.disabled = true;
+    try {
+      var data = await grist.docApi.fetchTable(H.tableId);
+      var col = data[choiceColumn] || [];
+      var existing = {};
+      data.id.forEach(function (id) { existing[id] = true; });
+      var desired = {}, missing = 0;
+      CHOICES.forEach(function (c) {
+        var id = e.ids[c];
+        if (!id) { return; }
+        if (existing[id]) { desired[id] = c; } else { missing++; }
+      });
+      var actions = [];
+      data.id.forEach(function (id, i) {
+        var cur = col[i] || "", want = desired[id] || "";
+        if ((want || CHOICES.indexOf(cur) !== -1) && cur !== want) {
+          var f = {}; f[choiceColumn] = want;
+          actions.push(["UpdateRecord", H.tableId, id, f]);
+        }
+      });
+      if (!actions.length) {
+        W.alert("L'état actuel est déjà identique à celui du " + fmtDate(e.date) + ".");
+        btn.disabled = false;
+        return;
+      }
+      var msg = "Réappliquer l'état du " + fmtDate(e.date) + " ?\n" + actions.length + " ligne(s) seront modifiées.";
+      if (missing) { msg += "\n(" + missing + " ligne(s) de l'historique n'existent plus et seront ignorées.)"; }
+      if (!W.confirm(msg)) { btn.disabled = false; return; }
+      await grist.docApi.applyUserActions(actions);
+      closeHistory();
+    } catch (err) {
+      W.alert("Application impossible : " + (err && err.message ? err.message : err));
+    }
+    btn.disabled = !H.sel;
+  }
+
+  function bindUi() {
+    $("hClose").onclick = closeHistory;
+    $("hCancel").onclick = closeHistory;
+    $("hApply").onclick = applyHistory;
+    $("overlay").onclick = function (ev) { if (!popup && ev.target === $("overlay")) { closeHistory(); } };
+    D.onkeydown = function (ev) { if (ev.key === "Escape") { closeHistory(); } };
+    $("yearSel").onchange = buildMonths;
+    $("monthSel").onchange = refreshList;
+    $("thSize").oninput = function (ev) { $("pvBody").style.setProperty("--th", ev.target.value + "px"); };
+    $("pvBody").style.setProperty("--th", $("thSize").value + "px");
+  }
+  document.getElementById("hist").addEventListener("click", openHistory);
+  window.addEventListener("beforeunload", function () { if (popup && !popup.closed) { popup.close(); } });
+
+  /* -----------------------------------------------------------
+     Ce widget doit être lié (« Select by » dans le panneau de
+     droite) à la vue principale de Mes_habits, pour connaître la
+     ligne actuellement sélectionnée.
+     ----------------------------------------------------------- */
+  grist.ready({
+    columns: [
+      { name: "Choix", title: "Colonne à choix unique", type: "Choice", optional: false },
+      { name: "Photo", title: "Colonne photo (aperçu de l'historique)", type: "Attachments", optional: true }
+    ],
+    requiredAccess: "full"
+  });
+
+  grist.onRecord(async function (record, mappings) {
+    choiceColumn = mappings && mappings.Choix;
+    photoColumn = (mappings && mappings.Photo) || null;
+    currentRowId = record ? record.id : null;
+    currentValue = (choiceColumn && record) ? record[choiceColumn] : null;
+
+    await loadChoices();
+    render();
+  });
+
+  grist.onNewRecord(function () {
+    currentRowId = null;
+    currentValue = null;
+    render();
+  });
+})();
+</script>
+</body>
+</html>
