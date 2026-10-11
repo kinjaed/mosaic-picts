@@ -72,7 +72,7 @@
   /* ---- Cadres : choix (gris clair) / actions (gris foncé) ---- */
   :root {
     --panel-a: #ececf1; --panel-b: #5c5c6a; --edge: #9b9bac;
-    --save: #d93a3a; --hist: #2f6fed;
+    --save: #d93a3a; --hist: #9dbdf5;
   }
   @media (prefers-color-scheme: dark) {
     :root { --panel-a: #3b3b4a; --panel-b: #1f1f29; --edge: #6d6d82; }
@@ -80,7 +80,8 @@
   .wrap { display: flex; gap: 8px; width: 100%; height: 100%; align-items: stretch; }
   .panel { border-radius: 14px; padding: 8px 10px; }
   .panel.choices { flex: 1; min-width: 0; background: var(--panel-a); overflow-y: auto; }
-  .panel.actions { flex: none; background: var(--panel-b); display: flex; flex-direction: column; gap: 8px; justify-content: center; }
+  .panel.actions { flex: none; background: var(--panel-a); display: flex; flex-direction: row; gap: 12px; align-items: center; }
+  .btns { display: flex; flex-direction: column; gap: 8px; }
   .act {
     font: inherit; font-weight: 600; padding: 6px 18px; color: #fff; cursor: pointer;
     border: 1.5px solid var(--edge); border-radius: 999px; transition: filter .12s ease, transform .05s ease;
@@ -89,7 +90,13 @@
   .act:active:not(:disabled) { transform: translateY(1px); }
   .act:disabled { opacity: .5; cursor: default; }
   .act.save { background: var(--save); }
-  .act.hist { background: var(--hist); }
+  .act.hist { background: var(--hist); color: #14284b; }
+  .datebox { display: flex; flex-direction: column; gap: 3px; }
+  .datebox label { font-size: 11px; font-weight: 600; color: var(--muted); padding-left: 6px; }
+  #saveDate {
+    font: inherit; padding: 4px 12px; color: var(--text); background: var(--bg);
+    border: 1.5px solid var(--edge); border-radius: 999px; color-scheme: light dark;
+  }
 
   /* ---- Fenêtre Historique ---- */
   .overlay {
@@ -153,8 +160,14 @@
     </div>
   </section>
   <aside class="panel actions">
-    <button id="save" class="act save" type="button" title="Enregistrer l'état actuel dans la table Historique">Enregistrer</button>
-    <button id="hist" class="act hist" type="button" title="Consulter et restaurer un enregistrement">Historique</button>
+    <div class="datebox">
+      <label for="saveDate">Date d'enregistrement</label>
+      <input id="saveDate" type="date">
+    </div>
+    <div class="btns">
+      <button id="save" class="act save" type="button" title="Enregistrer l'état actuel dans la table Historique">Enregistrer</button>
+      <button id="hist" class="act hist" type="button" title="Consulter et restaurer un enregistrement">Historique</button>
+    </div>
   </aside>
 </div>
 
@@ -189,7 +202,7 @@
 (function () {
   "use strict";
 
-  var el = { bar: document.getElementById("bar"), save: document.getElementById("save") };
+  var el = { bar: document.getElementById("bar"), save: document.getElementById("save"), date: document.getElementById("saveDate") };
   var HIST_TABLE = "Historique"; // table d'historique (créée automatiquement)
 
   var CHOICES = [];       // valeurs autorisées, lues depuis la colonne Choix
@@ -343,6 +356,16 @@
      qui porte chaque choix (une colonne par choix) dans la table
      « Historique », créée automatiquement au premier clic.
      ----------------------------------------------------------- */
+  function todayIso() {
+    var d = new Date();
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
+  function chosenEpoch() {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(el.date.value || "");
+    return m ? Date.UTC(+m[1], +m[2] - 1, +m[3]) / 1000 : dayEpoch();
+  }
+  el.date.value = todayIso();
+
   function dayEpoch() {
     var d = new Date();
     return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 1000;
@@ -391,7 +414,7 @@
         cols = await histCols();
       }
 
-      var day = dayEpoch();
+      var day = chosenEpoch();
       var fields = {};
       fields[cols.Date.colId] = day;
       CHOICES.forEach(function (c) {
@@ -403,7 +426,7 @@
       var dates = raw[cols.Date.colId] || [];
       var existing = dates.indexOf(day);
       if (existing !== -1) {
-        if (!confirm("Un enregistrement existe déjà pour aujourd'hui. Le remplacer ?")) {
+        if (!confirm("Un enregistrement existe déjà pour le " + fmtDate(day) + ". Le remplacer ?")) {
           el.save.disabled = false;
           return;
         }
@@ -412,6 +435,7 @@
         await grist.docApi.applyUserActions([["AddRecord", HIST_TABLE, null, fields]]);
       }
       el.save.textContent = "✓ Enregistré";
+      el.date.value = todayIso();
       setTimeout(function () { el.save.textContent = "Enregistrer"; }, 1500);
     } catch (e) {
       alert("Enregistrement impossible : " + (e && e.message ? e.message : e));
