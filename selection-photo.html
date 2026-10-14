@@ -148,6 +148,17 @@
   .detail select { width: 100%; padding: 7px 10px; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 10px; }
   .detail .thumbs { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
   .detail .thumbs img { display: block; height: 170px; width: auto; max-width: 100%; object-fit: cover; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,.18); }
+  .detail .stars { display: flex; gap: 2px; }
+  .detail .stars button { border: 0; background: transparent; padding: 0 2px; font-size: 30px; line-height: 1; cursor: pointer; color: #b5b5c0; transition: color .1s ease, transform .05s ease; }
+  .detail .stars button.on { color: #f5c518; }
+  .detail .stars button:hover:not(:disabled) { transform: scale(1.12); }
+  .detail .stars button:disabled { opacity: .35; cursor: default; }
+  .detail .fit-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--muted); font-weight: 600; }
+  .detail .switch { position: relative; flex: none; width: 38px; height: 22px; padding: 0; border: 0; border-radius: 999px; background: var(--border); cursor: pointer; transition: background .15s ease; }
+  .detail .switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s ease; }
+  .detail .switch[aria-checked="true"] { background: var(--accent); }
+  .detail .switch[aria-checked="true"]::after { transform: translateX(16px); }
+  .detail .thumbs.fit img { width: 100%; height: auto; max-width: 100%; object-fit: contain; }
   .detail .status { font-size: 11px; color: var(--muted); min-height: 14px; }
   .detail .status.error { color: var(--danger); }
   body.win { display: block; padding: 0; }
@@ -464,7 +475,7 @@
      ----------------------------------------------------------- */
   var D = document, W = window, popup = null; // document / fenêtre où s'affiche l'historique
   function $(id) { return D.getElementById(id); }
-  var H = { entries: [], sel: null, data: null, idx: {}, tok: null, tableId: null };
+  var H = { fit: true, entries: [], sel: null, data: null, idx: {}, tok: null, tableId: null };
 
   function fmtDate(e) {
     return new Date(e * 1000).toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" });
@@ -636,7 +647,7 @@
 
   async function saveExtra(key, value) {
     var e = H.sel;
-    if (!e) { return; }
+    if (!e) { return false; }
     setStatus("Enregistrement…");
     try {
       var col = H.hcols[key];
@@ -644,8 +655,10 @@
       await grist.docApi.applyUserActions([["UpdateRecord", HIST_TABLE, e.rowId, f]]);
       e[key] = value;
       setStatus("✓ Enregistré");
+      return true;
     } catch (err) {
       setStatus("Échec : " + (err && err.message ? err.message : err), true);
+      return false;
     }
   }
 
@@ -659,18 +672,53 @@
     if (hc.choice) {
       var f1 = document.createElement("div"); f1.className = "fcol";
       var l1 = document.createElement("label"); l1.textContent = "Note";
-      var sel = document.createElement("select");
-      sel.appendChild(option("", "—"));
-      var list = hc.choice.choices.slice();
-      if (e.choice && list.indexOf(e.choice) === -1) { list.push(e.choice); }
-      list.forEach(function (c) { sel.appendChild(option(c, c)); });
-      sel.value = e.choice || "";
-      sel.onchange = function () { saveExtra("choice", sel.value); };
-      f1.appendChild(l1); f1.appendChild(sel); box.appendChild(f1);
+      var stars = document.createElement("div"); stars.className = "stars";
+      stars.setAttribute("role", "group"); stars.setAttribute("aria-label", "Note");
+      var choices = hc.choice.choices;
+      var btns = [];
+      function paint() {
+        var level = choices.indexOf(e.choice) + 1; // 0 = aucune étoile
+        btns.forEach(function (b, i) {
+          b.className = i < level ? "on" : "";
+          b.setAttribute("aria-pressed", String(i < level));
+        });
+      }
+      for (var k = 0; k < 5; k++) {
+        (function (n) {
+          var b = document.createElement("button");
+          b.type = "button"; b.textContent = "\u2605";
+          b.title = choices[n - 1] !== undefined ? String(choices[n - 1]) : "";
+          b.disabled = choices[n - 1] === undefined;
+          b.onclick = async function () {
+            var prev = e.choice;
+            // recliquer sur la dernière étoile active remet la valeur à vide
+            var value = (choices[n - 1] === e.choice) ? "" : choices[n - 1];
+            e.choice = value; paint();
+            var ok = await saveExtra("choice", value);
+            if (!ok) { e.choice = prev; paint(); }
+          };
+          btns.push(b); stars.appendChild(b);
+        })(k + 1);
+      }
+      paint();
+      f1.appendChild(l1); f1.appendChild(stars); box.appendChild(f1);
     }
 
     if (hc.photo) {
-      var th = document.createElement("div"); th.className = "thumbs";
+      var fitRow = document.createElement("div"); fitRow.className = "fit-row";
+      var fitLbl = document.createElement("span"); fitLbl.textContent = "Ajuster à la largeur";
+      var sw = document.createElement("button");
+      sw.type = "button"; sw.className = "switch"; sw.setAttribute("role", "switch");
+      sw.setAttribute("aria-label", "Ajuster à la largeur");
+      sw.setAttribute("aria-checked", String(H.fit));
+      fitRow.appendChild(fitLbl); fitRow.appendChild(sw); box.appendChild(fitRow);
+
+      var th = document.createElement("div"); th.className = "thumbs" + (H.fit ? " fit" : "");
+      sw.onclick = function () {
+        H.fit = !H.fit;
+        sw.setAttribute("aria-checked", String(H.fit));
+        th.classList.toggle("fit", H.fit);
+      };
       var ids = Array.isArray(e.photo) ? e.photo.filter(function (v) { return typeof v === "number"; }) : [];
       if (!ids.length) {
         var none = document.createElement("span"); none.className = "hint"; none.textContent = "Pas de photo";
