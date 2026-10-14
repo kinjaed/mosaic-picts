@@ -142,6 +142,18 @@
   .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   .btn.primary:hover:not(:disabled) { filter: brightness(1.08); }
   .btn:disabled { opacity: .45; cursor: default; }
+  .detail { border-top: 1px solid var(--border); padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; background: var(--bg); }
+  .detail .row { display: flex; gap: 10px; align-items: flex-start; }
+  .detail .row > label { width: 52px; padding-top: 7px; color: var(--muted); font-weight: 600; flex: none; }
+  .detail select, .detail textarea {
+    flex: 1; min-width: 0; padding: 7px 10px; font: inherit; color: var(--text);
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  }
+  .detail textarea { resize: vertical; min-height: 56px; }
+  .detail .status { font-size: 11px; color: var(--muted); min-height: 14px; padding-left: 62px; }
+  .detail .status.error { color: var(--danger); }
+  .detail .thumbs { display: flex; gap: 8px; flex-wrap: wrap; flex: 1; }
+  .detail .thumbs img { height: 90px; width: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.18); }
   body.win { display: block; padding: 0; }
   .win .overlay { padding: 0; background: var(--bg); backdrop-filter: none; }
   .win .dlg { width: 100%; height: 100%; border: 0; border-radius: 0; box-shadow: none; }
@@ -189,6 +201,7 @@
       <div class="preview">
         <div class="pv-head"><span>Aperçu</span><input id="thSize" type="range" min="80" max="360" value="160" aria-label="Taille des vignettes"></div>
         <div id="pvBody"></div>
+        <div id="detail" class="detail" style="display:none"></div>
       </div>
     </div>
     <div class="dlg-foot">
@@ -380,7 +393,9 @@
     var cols = {};
     for (var j = 0; j < C.id.length; j++) {
       if (C.parentId[j] === ref && C.colId[j].indexOf("gristHelper_") !== 0 && C.colId[j] !== "manualSort") {
-        cols[C.label[j]] = { colId: C.colId[j], type: C.type[j] };
+        var wo = {};
+        try { wo = JSON.parse(C.widgetOptions[j] || "{}"); } catch (e) { wo = {}; }
+        cols[C.label[j]] = { colId: C.colId[j], type: C.type[j], choices: Array.isArray(wo.choices) ? wo.choices : [] };
       }
     }
     return cols;
@@ -522,13 +537,18 @@
       H.data.id.forEach(function (id, i) { H.idx[id] = i; });
       H.entries = [];
       var cols = await histCols();
+      H.hcols = histExtra(cols);
       if (cols && cols.Date) {
         var raw = await grist.docApi.fetchTable(HIST_TABLE);
         (raw[cols.Date.colId] || []).forEach(function (d, i) {
           if (typeof d !== "number") { return; }
           var ids = {};
           CHOICES.forEach(function (c) { if (cols[c]) { ids[c] = (raw[cols[c].colId] || [])[i] || 0; } });
-          H.entries.push({ rowId: raw.id[i], date: d, ids: ids });
+          var ent = { rowId: raw.id[i], date: d, ids: ids };
+          if (H.hcols.choice) { ent.choice = (raw[H.hcols.choice.colId] || [])[i] || ""; }
+          if (H.hcols.photo) { ent.photo = (raw[H.hcols.photo.colId] || [])[i] || null; }
+          if (H.hcols.note) { ent.note = (raw[H.hcols.note.colId] || [])[i] || ""; }
+          H.entries.push(ent);
         });
         H.entries.sort(function (a, b) { return b.date - a.date; });
       }
@@ -599,10 +619,100 @@
     renderPreview();
   }
 
+  /* Colonnes ajoutées à la table Historique : première colonne Choix,
+     première colonne Pièces jointes, et colonne « Note » (créée si absente). */
+  function histExtra(cols) {
+    var r = { choice: null, photo: null, note: null };
+    Object.keys(cols || {}).forEach(function (label) {
+      var c = cols[label];
+      if (c.type === "Choice" && !r.choice) { r.choice = c; }
+      else if (c.type === "Attachments" && !r.photo) { r.photo = c; }
+      else if (label.toLowerCase() === "note" && !r.note) { r.note = c; }
+    });
+    return r;
+  }
+
+  function setStatus(text, isError) {
+    var s = $("detailStatus");
+    if (!s) { return; }
+    s.textContent = text;
+    s.className = "status" + (isError ? " error" : "");
+  }
+
+  async function saveExtra(key, value) {
+    var e = H.sel;
+    if (!e) { return; }
+    setStatus("Enregistrement…");
+    try {
+      if (key === "note" && !H.hcols.note) {
+        await grist.docApi.applyUserActions([["AddColumn", HIST_TABLE, "Note", { type: "Text", label: "Note" }]]);
+        H.hcols = histExtra(await histCols());
+      }
+      var col = H.hcols[key];
+      var f = {}; f[col.colId] = value;
+      await grist.docApi.applyUserActions([["UpdateRecord", HIST_TABLE, e.rowId, f]]);
+      e[key] = value;
+      setStatus("✓ Enregistré");
+    } catch (err) {
+      setStatus("Échec : " + (err && err.message ? err.message : err), true);
+    }
+  }
+
+  function renderDetail() {
+    var box = $("detail");
+    box.innerHTML = "";
+    var e = H.sel;
+    if (!e) { box.style.display = "none"; return; }
+    box.style.display = "";
+    var hc = H.hcols || {};
+
+    if (hc.choice) {
+      var r1 = document.createElement("div"); r1.className = "row";
+      var l1 = document.createElement("label"); l1.textContent = "Choix";
+      var sel = document.createElement("select");
+      sel.appendChild(option("", "—"));
+      var list = hc.choice.choices.slice();
+      if (e.choice && list.indexOf(e.choice) === -1) { list.push(e.choice); }
+      list.forEach(function (c) { sel.appendChild(option(c, c)); });
+      sel.value = e.choice || "";
+      sel.onchange = function () { saveExtra("choice", sel.value); };
+      r1.appendChild(l1); r1.appendChild(sel); box.appendChild(r1);
+    }
+
+    var r2 = document.createElement("div"); r2.className = "row";
+    var l2 = document.createElement("label"); l2.textContent = "Note";
+    var ta = document.createElement("textarea");
+    ta.value = e.note || "";
+    ta.placeholder = "Ajouter une note…";
+    ta.onchange = function () { saveExtra("note", ta.value); };
+    r2.appendChild(l2); r2.appendChild(ta); box.appendChild(r2);
+
+    if (hc.photo) {
+      var r3 = document.createElement("div"); r3.className = "row";
+      var l3 = document.createElement("label"); l3.textContent = "Photo";
+      var th = document.createElement("div"); th.className = "thumbs";
+      var ids = Array.isArray(e.photo) ? e.photo.filter(function (v) { return typeof v === "number"; }) : [];
+      if (!ids.length) {
+        var none = document.createElement("span"); none.className = "hint"; none.textContent = "Pas de photo";
+        th.appendChild(none);
+      }
+      ids.forEach(function (id) {
+        var img = document.createElement("img");
+        img.loading = "lazy"; img.alt = "Photo"; img.src = attUrl(id);
+        th.appendChild(img);
+      });
+      r3.appendChild(l3); r3.appendChild(th); box.appendChild(r3);
+    }
+
+    var st = document.createElement("div"); st.id = "detailStatus"; st.className = "status";
+    box.appendChild(st);
+  }
+
   function renderPreview() {
     var body = $("pvBody");
     body.innerHTML = "";
     $("hApply").disabled = !H.sel;
+    renderDetail();
     if (!H.sel) { return; }
     var shown = 0;
     CHOICES.forEach(function (c) {
