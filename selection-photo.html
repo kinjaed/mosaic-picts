@@ -77,7 +77,15 @@
   @media (prefers-color-scheme: dark) {
     :root { --panel-a: #3b3b4a; --panel-b: #1f1f29; --edge: #6d6d82; }
   }
-  .wrap { display: flex; gap: 8px; width: 100%; height: 100%; align-items: stretch; }
+  .root { width: 100%; height: 100%; display: flex; flex-direction: column; gap: 8px; }
+  .wrap { display: flex; gap: 8px; width: 100%; flex: none; align-items: stretch; }
+  .panel.gallery { flex: 1; min-height: 90px; display: flex; flex-direction: column; padding: 0; overflow: hidden; background: var(--panel-a); }
+  .panel.gallery.off { display: none; }
+  .g-head { display: flex; align-items: center; gap: 10px; padding: 7px 12px; border-bottom: 1px solid var(--border); }
+  .g-title { font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .g-count { color: var(--muted); font-size: 12px; margin-right: auto; }
+  .g-head input[type=range] { width: 140px; accent-color: var(--accent); }
+  .g-body { flex: 1; overflow: auto; padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 10px; align-content: flex-start; align-items: flex-start; }
   .panel { border-radius: 14px; padding: 8px 10px; }
   .panel.choices { flex: 1; min-width: 0; background: var(--panel-a); overflow-y: auto; }
   .panel.actions { flex: none; background: var(--panel-a); display: flex; flex-direction: row; gap: 12px; align-items: center; }
@@ -112,7 +120,7 @@
   .dlg-head h2 { margin: 0; font-size: 14px; letter-spacing: .12em; text-transform: uppercase; }
   .xbtn { border: 0; background: var(--surface); color: var(--text); width: 30px; height: 30px; border-radius: 50%; font-size: 18px; line-height: 1; cursor: pointer; }
   .xbtn:hover { background: var(--border); }
-  .dlg-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(200px, 290px) 1fr minmax(200px, 290px); gap: 16px; padding: 14px 18px; overflow: auto; }
+  .dlg-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(200px, 290px) 1fr; gap: 16px; padding: 14px 18px; overflow: auto; }
   .left { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
   .field { display: flex; align-items: center; gap: 10px; }
   .field label { width: 52px; color: var(--muted); font-weight: 600; }
@@ -142,37 +150,18 @@
   .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   .btn.primary:hover:not(:disabled) { filter: brightness(1.08); }
   .btn:disabled { opacity: .45; cursor: default; }
-  .detail { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 14px; padding: 12px; overflow-y: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
-  .detail .fcol { display: flex; flex-direction: column; gap: 6px; }
-  .detail label { color: var(--muted); font-weight: 600; }
-  .detail select { width: 100%; padding: 7px 10px; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 10px; }
-  .detail .thumbs { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
-  .detail .thumbs img { display: block; height: 170px; width: auto; max-width: 100%; object-fit: cover; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,.18); }
-  .detail .stars { display: flex; gap: 2px; }
-  .detail .stars button { border: 0; background: transparent; padding: 0 2px; font-size: 30px; line-height: 1; cursor: pointer; color: #b5b5c0; transition: color .1s ease, transform .05s ease; }
-  .detail .stars button.on { color: #f5c518; }
-  .detail .stars button:hover:not(:disabled) { transform: scale(1.12); }
-  .detail .stars button:disabled { opacity: .35; cursor: default; }
-  .detail .fit-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--muted); font-weight: 600; }
-  .detail .switch { position: relative; flex: none; width: 38px; height: 22px; padding: 0; border: 0; border-radius: 999px; background: var(--border); cursor: pointer; transition: background .15s ease; }
-  .detail .switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s ease; }
-  .detail .switch[aria-checked="true"] { background: var(--accent); }
-  .detail .switch[aria-checked="true"]::after { transform: translateX(16px); }
-  .detail .thumbs.fit img { width: 100%; height: auto; max-width: 100%; object-fit: contain; }
-  .detail .status { font-size: 11px; color: var(--muted); min-height: 14px; }
-  .detail .status.error { color: var(--danger); }
   body.win { display: block; padding: 0; }
   .win .overlay { padding: 0; background: var(--bg); backdrop-filter: none; }
   .win .dlg { width: 100%; height: 100%; border: 0; border-radius: 0; box-shadow: none; }
   @media (max-width: 640px) {
     .dlg-body { grid-template-columns: 1fr; }
-    .detail { max-height: 360px; }
     .dates { max-height: 200px; }
   }
 </style>
 </head>
 <body>
 
+<div class="root">
 <div class="wrap">
   <section class="panel choices">
     <div id="bar" class="bar">
@@ -189,6 +178,15 @@
       <button id="hist" class="act hist" type="button" title="Consulter et restaurer un enregistrement">Historique</button>
     </div>
   </aside>
+</div>
+<section id="gallery" class="panel gallery">
+  <div class="g-head">
+    <span class="g-title">Photos</span>
+    <span id="gCount" class="g-count"></span>
+    <input id="gSize" type="range" min="60" max="360" value="140" aria-label="Taille des photos">
+  </div>
+  <div id="gBody" class="g-body"></div>
+</section>
 </div>
 
 <div id="overlay" class="overlay" role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
@@ -210,7 +208,6 @@
         <div class="pv-head"><span>Aperçu</span><input id="thSize" type="range" min="80" max="360" value="160" aria-label="Taille des vignettes"></div>
         <div id="pvBody"></div>
       </div>
-      <div id="detail" class="detail"></div>
     </div>
     <div class="dlg-foot">
       <button id="hCancel" class="btn ghost" type="button">Annuler</button>
@@ -401,9 +398,7 @@
     var cols = {};
     for (var j = 0; j < C.id.length; j++) {
       if (C.parentId[j] === ref && C.colId[j].indexOf("gristHelper_") !== 0 && C.colId[j] !== "manualSort") {
-        var wo = {};
-        try { wo = JSON.parse(C.widgetOptions[j] || "{}"); } catch (e) { wo = {}; }
-        cols[C.label[j]] = { colId: C.colId[j], type: C.type[j], choices: Array.isArray(wo.choices) ? wo.choices : [] };
+        cols[C.label[j]] = { colId: C.colId[j], type: C.type[j] };
       }
     }
     return cols;
@@ -475,7 +470,7 @@
      ----------------------------------------------------------- */
   var D = document, W = window, popup = null; // document / fenêtre où s'affiche l'historique
   function $(id) { return D.getElementById(id); }
-  var H = { fit: true, entries: [], sel: null, data: null, idx: {}, tok: null, tableId: null };
+  var H = { entries: [], sel: null, data: null, idx: {}, tok: null, tableId: null };
 
   function fmtDate(e) {
     return new Date(e * 1000).toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" });
@@ -545,17 +540,13 @@
       H.data.id.forEach(function (id, i) { H.idx[id] = i; });
       H.entries = [];
       var cols = await histCols();
-      H.hcols = histExtra(cols);
       if (cols && cols.Date) {
         var raw = await grist.docApi.fetchTable(HIST_TABLE);
         (raw[cols.Date.colId] || []).forEach(function (d, i) {
           if (typeof d !== "number") { return; }
           var ids = {};
           CHOICES.forEach(function (c) { if (cols[c]) { ids[c] = (raw[cols[c].colId] || [])[i] || 0; } });
-          var ent = { rowId: raw.id[i], date: d, ids: ids };
-          if (H.hcols.choice) { ent.choice = (raw[H.hcols.choice.colId] || [])[i] || ""; }
-          if (H.hcols.photo) { ent.photo = (raw[H.hcols.photo.colId] || [])[i] || null; }
-          H.entries.push(ent);
+          H.entries.push({ rowId: raw.id[i], date: d, ids: ids });
         });
         H.entries.sort(function (a, b) { return b.date - a.date; });
       }
@@ -626,121 +617,10 @@
     renderPreview();
   }
 
-  /* Colonnes ajoutées à la table Historique : première colonne Choix,
-     première colonne Pièces jointes. */
-  function histExtra(cols) {
-    var r = { choice: null, photo: null };
-    Object.keys(cols || {}).forEach(function (label) {
-      var c = cols[label];
-      if (c.type === "Choice" && !r.choice) { r.choice = c; }
-      else if (c.type === "Attachments" && !r.photo) { r.photo = c; }
-    });
-    return r;
-  }
-
-  function setStatus(text, isError) {
-    var s = $("detailStatus");
-    if (!s) { return; }
-    s.textContent = text;
-    s.className = "status" + (isError ? " error" : "");
-  }
-
-  async function saveExtra(key, value) {
-    var e = H.sel;
-    if (!e) { return false; }
-    setStatus("Enregistrement…");
-    try {
-      var col = H.hcols[key];
-      var f = {}; f[col.colId] = value;
-      await grist.docApi.applyUserActions([["UpdateRecord", HIST_TABLE, e.rowId, f]]);
-      e[key] = value;
-      setStatus("✓ Enregistré");
-      return true;
-    } catch (err) {
-      setStatus("Échec : " + (err && err.message ? err.message : err), true);
-      return false;
-    }
-  }
-
-  function renderDetail() {
-    var box = $("detail");
-    box.innerHTML = "";
-    var e = H.sel;
-    if (!e) { return; }
-    var hc = H.hcols || {};
-
-    if (hc.choice) {
-      var f1 = document.createElement("div"); f1.className = "fcol";
-      var l1 = document.createElement("label"); l1.textContent = "Note";
-      var stars = document.createElement("div"); stars.className = "stars";
-      stars.setAttribute("role", "group"); stars.setAttribute("aria-label", "Note");
-      var choices = hc.choice.choices;
-      var btns = [];
-      function paint() {
-        var level = choices.indexOf(e.choice) + 1; // 0 = aucune étoile
-        btns.forEach(function (b, i) {
-          b.className = i < level ? "on" : "";
-          b.setAttribute("aria-pressed", String(i < level));
-        });
-      }
-      for (var k = 0; k < 5; k++) {
-        (function (n) {
-          var b = document.createElement("button");
-          b.type = "button"; b.textContent = "\u2605";
-          b.title = choices[n - 1] !== undefined ? String(choices[n - 1]) : "";
-          b.disabled = choices[n - 1] === undefined;
-          b.onclick = async function () {
-            var prev = e.choice;
-            // recliquer sur la dernière étoile active remet la valeur à vide
-            var value = (choices[n - 1] === e.choice) ? "" : choices[n - 1];
-            e.choice = value; paint();
-            var ok = await saveExtra("choice", value);
-            if (!ok) { e.choice = prev; paint(); }
-          };
-          btns.push(b); stars.appendChild(b);
-        })(k + 1);
-      }
-      paint();
-      f1.appendChild(l1); f1.appendChild(stars); box.appendChild(f1);
-    }
-
-    if (hc.photo) {
-      var fitRow = document.createElement("div"); fitRow.className = "fit-row";
-      var fitLbl = document.createElement("span"); fitLbl.textContent = "Ajuster à la largeur";
-      var sw = document.createElement("button");
-      sw.type = "button"; sw.className = "switch"; sw.setAttribute("role", "switch");
-      sw.setAttribute("aria-label", "Ajuster à la largeur");
-      sw.setAttribute("aria-checked", String(H.fit));
-      fitRow.appendChild(fitLbl); fitRow.appendChild(sw); box.appendChild(fitRow);
-
-      var th = document.createElement("div"); th.className = "thumbs" + (H.fit ? " fit" : "");
-      sw.onclick = function () {
-        H.fit = !H.fit;
-        sw.setAttribute("aria-checked", String(H.fit));
-        th.classList.toggle("fit", H.fit);
-      };
-      var ids = Array.isArray(e.photo) ? e.photo.filter(function (v) { return typeof v === "number"; }) : [];
-      if (!ids.length) {
-        var none = document.createElement("span"); none.className = "hint"; none.textContent = "Pas de photo";
-        th.appendChild(none);
-      }
-      ids.forEach(function (id) {
-        var img = document.createElement("img");
-        img.loading = "lazy"; img.alt = "Photo"; img.src = attUrl(id);
-        th.appendChild(img);
-      });
-      box.appendChild(th);
-    }
-
-    var st = document.createElement("div"); st.id = "detailStatus"; st.className = "status";
-    box.appendChild(st);
-  }
-
   function renderPreview() {
     var body = $("pvBody");
     body.innerHTML = "";
     $("hApply").disabled = !H.sel;
-    renderDetail();
     if (!H.sel) { return; }
     var shown = 0;
     CHOICES.forEach(function (c) {
@@ -825,6 +705,114 @@
   window.addEventListener("beforeunload", function () { if (popup && !popup.closed) { popup.close(); } });
 
   /* -----------------------------------------------------------
+     Cadre photos : affiche la colonne Photo des lignes dont la
+     colonne à choix unique n'est pas vide, avec la valeur du choix
+     en légende. Option « Afficher le cadre photos » dans le panneau
+     de droite de Grist.
+     ----------------------------------------------------------- */
+  var G = { tok: null, tokAt: 0, busy: false, again: false, show: true, sig: null, timer: null, sizeTimer: null };
+
+  async function galleryToken() {
+    if (!G.tok || Date.now() - G.tokAt > Math.max(30000, (G.tok.ttlMsecs || 300000) - 60000)) {
+      G.tok = await grist.docApi.getAccessToken({ readOnly: true });
+      G.tokAt = Date.now();
+    }
+    return G.tok;
+  }
+
+  function galleryMessage(text) {
+    var body = document.getElementById("gBody");
+    body.innerHTML = "";
+    var d = document.createElement("div");
+    d.className = "hint"; d.textContent = text;
+    body.appendChild(d);
+    document.getElementById("gCount").textContent = "";
+    G.sig = null;
+  }
+
+  async function refreshGallery() {
+    if (!G.show) { return; }
+    if (G.busy) { G.again = true; return; }
+    G.busy = true;
+    try {
+      if (!choiceColumn) {
+        galleryMessage("Associez la colonne à choix unique dans le panneau de droite.");
+      } else {
+        var tableId = await grist.getSelectedTableId();
+        var data = await grist.docApi.fetchTable(tableId);
+        var tok = await galleryToken();
+        var col = data[choiceColumn] || [];
+        var items = [];
+        data.id.forEach(function (id, i) {
+          var v = col[i];
+          if (!v) { return; }
+          var att = photoColumn ? firstAttachment((data[photoColumn] || [])[i]) : null;
+          items.push({ id: id, choice: String(v), att: att });
+        });
+        items.sort(function (a, b) {
+          var ia = CHOICES.indexOf(a.choice), ib = CHOICES.indexOf(b.choice);
+          if (ia === -1) { ia = 9999; } if (ib === -1) { ib = 9999; }
+          return ia - ib || a.id - b.id;
+        });
+        var sig = items.map(function (x) { return x.id + "|" + x.choice + "|" + x.att; }).join(";") + "#" + (photoColumn || "");
+        if (sig !== G.sig) {
+          G.sig = sig;
+          var body = document.getElementById("gBody");
+          body.innerHTML = "";
+          if (!items.length) {
+            var h = document.createElement("div");
+            h.className = "hint"; h.textContent = "Aucune ligne avec une valeur dans la colonne à choix unique.";
+            body.appendChild(h);
+          }
+          items.forEach(function (it) {
+            var fig = document.createElement("figure");
+            fig.className = "ph";
+            if (it.att) {
+              var img = document.createElement("img");
+              img.loading = "lazy"; img.decoding = "async"; img.alt = it.choice;
+              img.src = tok.baseUrl + "/attachments/" + it.att + "/download?auth=" + tok.token;
+              fig.appendChild(img);
+            } else {
+              var none = document.createElement("div");
+              none.className = "none";
+              none.textContent = photoColumn ? "Pas de photo" : "Associez la colonne Photo";
+              fig.appendChild(none);
+            }
+            var cap = document.createElement("figcaption");
+            cap.textContent = it.choice;
+            var colors = CHOICE_COLORS[it.choice];
+            if (colors && colors.fill) { cap.style.background = colors.fill; cap.style.color = colors.text || "#fff"; }
+            fig.appendChild(cap);
+            body.appendChild(fig);
+          });
+          document.getElementById("gCount").textContent = items.length + " ligne" + (items.length > 1 ? "s" : "");
+        }
+      }
+    } catch (e) {
+      galleryMessage("Photos indisponibles : " + (e && e.message ? e.message : e));
+    }
+    G.busy = false;
+    if (G.again) { G.again = false; refreshGallery(); }
+  }
+
+  function scheduleGallery() {
+    clearTimeout(G.timer);
+    G.timer = setTimeout(refreshGallery, 150);
+  }
+
+  function applyThumbSize(px) {
+    document.getElementById("gBody").style.setProperty("--th", px + "px");
+  }
+  applyThumbSize(document.getElementById("gSize").value);
+  document.getElementById("gSize").addEventListener("input", function (ev) {
+    applyThumbSize(ev.target.value);
+    clearTimeout(G.sizeTimer);
+    G.sizeTimer = setTimeout(function () {
+      try { grist.setOption("thumbSize", Number(ev.target.value)); } catch (e) { /* option non mémorisée */ }
+    }, 400);
+  });
+
+  /* -----------------------------------------------------------
      Ce widget doit être lié (« Select by » dans le panneau de
      droite) à la vue principale de Mes_habits, pour connaître la
      ligne actuellement sélectionnée.
@@ -833,6 +821,9 @@
     columns: [
       { name: "Choix", title: "Colonne à choix unique", type: "Choice", optional: false },
       { name: "Photo", title: "Colonne photo (aperçu de l'historique)", type: "Attachments", optional: true }
+    ],
+    options: [
+      { name: "showPhotos", type: "boolean", title: "Afficher le cadre photos", description: "Affiche sous les boutons les photos des lignes dont le choix n'est pas vide.", defaultValue: true }
     ],
     requiredAccess: "full"
   });
@@ -845,6 +836,24 @@
 
     await loadChoices();
     render();
+    scheduleGallery();
+  });
+
+  // Se met à jour à chaque modification de la table (le contenu est relu via l'API)
+  grist.onRecords(function () { scheduleGallery(); });
+
+  grist.onOptions(function (opts) {
+    opts = opts || {};
+    var show = opts.showPhotos !== false;
+    document.getElementById("gallery").classList.toggle("off", !show);
+    var changed = show && !G.show;
+    G.show = show;
+    var size = Number(opts.thumbSize);
+    if (size >= 60 && size <= 360) {
+      document.getElementById("gSize").value = String(size);
+      applyThumbSize(size);
+    }
+    if (changed || show) { scheduleGallery(); }
   });
 
   grist.onNewRecord(function () {
