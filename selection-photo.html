@@ -72,7 +72,7 @@
   /* ---- Cadres : choix (gris clair) / actions (gris foncé) ---- */
   :root {
     --panel-a: #ececf1; --panel-b: #5c5c6a; --edge: #9b9bac;
-    --save: #d93a3a; --hist: #9dbdf5;
+    --save: #d93a3a; --hist: #9dbdf5; --slider: #4a8df0;
   }
   @media (prefers-color-scheme: dark) {
     :root { --panel-a: #3b3b4a; --panel-b: #1f1f29; --edge: #6d6d82; }
@@ -81,13 +81,20 @@
   .wrap { display: flex; gap: 8px; width: 100%; flex: none; align-items: stretch; }
   .panel.gallery { flex: 1; min-height: 90px; display: flex; flex-direction: column; padding: 0; overflow: hidden; background: var(--panel-a); }
   .panel.gallery.off { display: none; }
+  .opt {
+    align-self: flex-end; margin-top: 6px; display: flex; align-items: center; gap: 6px; flex: none;
+    padding: 2px 10px; font-size: 12px; color: var(--text); cursor: pointer; user-select: none;
+    background: var(--bg); border: 1px solid var(--edge); border-radius: 8px;
+  }
+  .opt input { accent-color: var(--slider); margin: 0; }
   .g-head { display: flex; align-items: center; gap: 10px; padding: 7px 12px; border-bottom: 1px solid var(--border); }
   .g-title { font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
   .g-count { color: var(--muted); font-size: 12px; margin-right: auto; }
-  .g-head input[type=range] { width: 140px; accent-color: var(--accent); }
+  .g-head input[type=range] { width: 140px; accent-color: var(--slider); }
   .g-body { flex: 1; overflow: auto; padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 10px; align-content: flex-start; align-items: flex-start; }
   .panel { border-radius: 14px; padding: 8px 10px; }
-  .panel.choices { flex: 1; min-width: 0; background: var(--panel-a); overflow-y: auto; }
+  .panel.choices { flex: 1; min-width: 0; background: var(--panel-a); overflow-y: auto; display: flex; flex-direction: column; }
+  .panel.choices .bar { flex: 1 0 auto; align-content: flex-start; }
   .panel.actions { flex: none; background: var(--panel-a); display: flex; flex-direction: row; gap: 12px; align-items: center; }
   .btns { display: flex; flex-direction: column; gap: 8px; }
   .act {
@@ -137,12 +144,12 @@
   .empty { color: var(--muted); padding: 16px; text-align: center; }
   .preview { display: flex; flex-direction: column; min-height: 260px; min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
   .pv-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  .pv-head input[type=range] { width: 150px; accent-color: var(--accent); }
+  .pv-head input[type=range] { width: 150px; accent-color: var(--slider); }
   #pvBody { flex: 1; overflow: auto; padding: 14px; display: flex; flex-wrap: wrap; gap: 12px; align-content: flex-start; align-items: flex-start; }
   figure.ph { position: relative; margin: 0; border-radius: 12px; overflow: hidden; background: var(--border); box-shadow: 0 2px 8px rgba(0, 0, 0, .18); }
   figure.ph img { display: block; height: var(--th, 160px); width: auto; }
   figure.ph .none { display: flex; align-items: center; justify-content: center; height: var(--th, 160px); width: calc(var(--th, 160px) * .75); color: var(--muted); font-size: 12px; text-align: center; padding: 8px; }
-  figure.ph figcaption { position: absolute; left: 8px; bottom: 8px; max-width: calc(100% - 16px); padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: rgba(20, 20, 30, .72); color: #fff; }
+  figure.ph figcaption { position: absolute; left: 6px; bottom: 6px; max-width: calc(100% - 12px); padding: 2px 8px; border-radius: 999px; font-size: 10.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: rgba(20, 20, 30, .72); color: #fff; }
   .dlg-foot { display: flex; justify-content: space-between; padding: 12px 18px; border-top: 1px solid var(--border); background: var(--surface); }
   .btn { font: inherit; font-weight: 600; padding: 8px 24px; border-radius: 999px; cursor: pointer; border: 1.5px solid var(--border); }
   .btn.ghost { background: transparent; color: var(--text); }
@@ -167,6 +174,7 @@
     <div id="bar" class="bar">
       <span class="hint" id="hint">Chargement…</span>
     </div>
+    <label class="opt" title="Afficher ou masquer le cadre photos"><input type="checkbox" id="gShow" checked> Afficher les photos</label>
   </section>
   <aside class="panel actions">
     <div class="datebox">
@@ -803,12 +811,25 @@
   function applyThumbSize(px) {
     document.getElementById("gBody").style.setProperty("--th", px + "px");
   }
+  try {
+    var savedSize = Number(localStorage.getItem("choixBoutons.thumb"));
+    if (savedSize >= 60 && savedSize <= 360) { document.getElementById("gSize").value = String(savedSize); }
+    G.show = localStorage.getItem("choixBoutons.show") !== "0";
+  } catch (e) { /* valeurs par défaut */ }
   applyThumbSize(document.getElementById("gSize").value);
+  document.getElementById("gShow").checked = G.show;
+  document.getElementById("gallery").classList.toggle("off", !G.show);
+  document.getElementById("gShow").addEventListener("change", function (ev) {
+    G.show = ev.target.checked;
+    document.getElementById("gallery").classList.toggle("off", !G.show);
+    try { localStorage.setItem("choixBoutons.show", G.show ? "1" : "0"); } catch (e) { /* non mémorisé */ }
+    if (G.show) { G.sig = null; scheduleGallery(); }
+  });
   document.getElementById("gSize").addEventListener("input", function (ev) {
     applyThumbSize(ev.target.value);
     clearTimeout(G.sizeTimer);
     G.sizeTimer = setTimeout(function () {
-      try { grist.setOption("thumbSize", Number(ev.target.value)); } catch (e) { /* option non mémorisée */ }
+      try { localStorage.setItem("choixBoutons.thumb", ev.target.value); } catch (e) { /* non mémorisé */ }
     }, 400);
   });
 
@@ -821,9 +842,6 @@
     columns: [
       { name: "Choix", title: "Colonne à choix unique", type: "Choice", optional: false },
       { name: "Photo", title: "Colonne photo (aperçu de l'historique)", type: "Attachments", optional: true }
-    ],
-    options: [
-      { name: "showPhotos", type: "boolean", title: "Afficher le cadre photos", description: "Affiche sous les boutons les photos des lignes dont le choix n'est pas vide.", defaultValue: true }
     ],
     requiredAccess: "full"
   });
@@ -842,19 +860,6 @@
   // Se met à jour à chaque modification de la table (le contenu est relu via l'API)
   grist.onRecords(function () { scheduleGallery(); });
 
-  grist.onOptions(function (opts) {
-    opts = opts || {};
-    var show = opts.showPhotos !== false;
-    document.getElementById("gallery").classList.toggle("off", !show);
-    var changed = show && !G.show;
-    G.show = show;
-    var size = Number(opts.thumbSize);
-    if (size >= 60 && size <= 360) {
-      document.getElementById("gSize").value = String(size);
-      applyThumbSize(size);
-    }
-    if (changed || show) { scheduleGallery(); }
-  });
 
   grist.onNewRecord(function () {
     currentRowId = null;
