@@ -127,7 +127,7 @@
   .dlg-head h2 { margin: 0; font-size: 14px; letter-spacing: .12em; text-transform: uppercase; }
   .xbtn { border: 0; background: var(--surface); color: var(--text); width: 30px; height: 30px; border-radius: 50%; font-size: 18px; line-height: 1; cursor: pointer; }
   .xbtn:hover { background: var(--border); }
-  .dlg-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(170px, 270px) 1fr; gap: 14px; padding: 14px 18px; overflow: auto; }
+  .dlg-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(170px, 270px) 1fr minmax(190px, 270px); gap: 14px; padding: 14px 18px; overflow: auto; }
   .left { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
   .field { display: flex; align-items: center; gap: 10px; }
   .field label { width: 52px; color: var(--muted); font-weight: 600; }
@@ -157,12 +157,32 @@
   .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   .btn.primary:hover:not(:disabled) { filter: brightness(1.08); }
   .btn:disabled { opacity: .45; cursor: default; }
+  .detail { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 14px; padding: 12px; overflow-y: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+  .detail .fcol { display: flex; flex-direction: column; gap: 6px; }
+  .detail label { color: var(--muted); font-weight: 600; }
+  .detail select { width: 100%; padding: 7px 10px; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 10px; }
+  .detail .thumbs { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+  .detail .thumbs img { display: block; height: 170px; width: auto; max-width: 100%; object-fit: cover; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,.18); }
+  .detail .stars { display: flex; gap: 2px; }
+  .detail .stars button { border: 0; background: transparent; padding: 0 2px; font-size: 30px; line-height: 1; cursor: pointer; color: #b5b5c0; transition: color .1s ease, transform .05s ease; }
+  .detail .stars button.on { color: #f5c518; }
+  .detail .stars button:hover:not(:disabled) { transform: scale(1.12); }
+  .detail .stars button:disabled { opacity: .35; cursor: default; }
+  .detail .fit-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--muted); font-weight: 600; }
+  .detail .switch { position: relative; flex: none; width: 38px; height: 22px; padding: 0; border: 0; border-radius: 999px; background: var(--border); cursor: pointer; transition: background .15s ease; }
+  .detail .switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s ease; }
+  .detail .switch[aria-checked="true"] { background: var(--accent); }
+  .detail .switch[aria-checked="true"]::after { transform: translateX(16px); }
+  .detail .thumbs.fit img { width: 100%; height: auto; max-width: 100%; object-fit: contain; }
+  .detail .status { font-size: 11px; color: var(--muted); min-height: 14px; }
+  .detail .status.error { color: var(--danger); }
   body.win { display: block; padding: 0; }
   .win .overlay { padding: 0; background: var(--bg); backdrop-filter: none; }
   .win .dlg { width: 100%; height: 100%; border: 0; border-radius: 0; box-shadow: none; }
   @media (max-width: 460px) {
     .dlg-body { grid-template-columns: 1fr; }
     .dates { max-height: 200px; }
+    .detail { max-height: 360px; }
   }
 </style>
 </head>
@@ -216,6 +236,7 @@
         <div class="pv-head"><span>Aperçu</span><input id="thSize" type="range" min="80" max="360" value="160" aria-label="Taille des vignettes"></div>
         <div id="pvBody"></div>
       </div>
+      <div id="detail" class="detail"></div>
     </div>
     <div class="dlg-foot">
       <button id="hCancel" class="btn ghost" type="button">Annuler</button>
@@ -406,7 +427,9 @@
     var cols = {};
     for (var j = 0; j < C.id.length; j++) {
       if (C.parentId[j] === ref && C.colId[j].indexOf("gristHelper_") !== 0 && C.colId[j] !== "manualSort") {
-        cols[C.label[j]] = { colId: C.colId[j], type: C.type[j] };
+        var wo = {};
+        try { wo = JSON.parse(C.widgetOptions[j] || "{}"); } catch (e) { wo = {}; }
+        cols[C.label[j]] = { colId: C.colId[j], type: C.type[j], choices: Array.isArray(wo.choices) ? wo.choices : [] };
       }
     }
     return cols;
@@ -478,7 +501,7 @@
      ----------------------------------------------------------- */
   var D = document, W = window, popup = null; // document / fenêtre où s'affiche l'historique
   function $(id) { return D.getElementById(id); }
-  var H = { entries: [], sel: null, data: null, idx: {}, tok: null, tableId: null };
+  var H = { fit: true, hcols: {}, entries: [], sel: null, data: null, idx: {}, tok: null, tableId: null };
 
   function fmtDate(e) {
     return new Date(e * 1000).toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" });
@@ -548,13 +571,17 @@
       H.data.id.forEach(function (id, i) { H.idx[id] = i; });
       H.entries = [];
       var cols = await histCols();
+      H.hcols = histExtra(cols);
       if (cols && cols.Date) {
         var raw = await grist.docApi.fetchTable(HIST_TABLE);
         (raw[cols.Date.colId] || []).forEach(function (d, i) {
           if (typeof d !== "number") { return; }
           var ids = {};
           CHOICES.forEach(function (c) { if (cols[c]) { ids[c] = (raw[cols[c].colId] || [])[i] || 0; } });
-          H.entries.push({ rowId: raw.id[i], date: d, ids: ids });
+          var ent = { rowId: raw.id[i], date: d, ids: ids };
+          if (H.hcols.choice) { ent.choice = (raw[H.hcols.choice.colId] || [])[i] || ""; }
+          if (H.hcols.photo) { ent.photo = (raw[H.hcols.photo.colId] || [])[i] || null; }
+          H.entries.push(ent);
         });
         H.entries.sort(function (a, b) { return b.date - a.date; });
       }
@@ -625,10 +652,121 @@
     renderPreview();
   }
 
+  /* Colonnes ajoutées à la table Historique : première colonne Choix,
+     première colonne Pièces jointes. */
+  function histExtra(cols) {
+    var r = { choice: null, photo: null };
+    Object.keys(cols || {}).forEach(function (label) {
+      var c = cols[label];
+      if (c.type === "Choice" && !r.choice) { r.choice = c; }
+      else if (c.type === "Attachments" && !r.photo) { r.photo = c; }
+    });
+    return r;
+  }
+
+  function setStatus(text, isError) {
+    var s = $("detailStatus");
+    if (!s) { return; }
+    s.textContent = text;
+    s.className = "status" + (isError ? " error" : "");
+  }
+
+  async function saveExtra(key, value) {
+    var e = H.sel;
+    if (!e) { return false; }
+    setStatus("Enregistrement…");
+    try {
+      var col = H.hcols[key];
+      var f = {}; f[col.colId] = value;
+      await grist.docApi.applyUserActions([["UpdateRecord", HIST_TABLE, e.rowId, f]]);
+      e[key] = value;
+      setStatus("✓ Enregistré");
+      return true;
+    } catch (err) {
+      setStatus("Échec : " + (err && err.message ? err.message : err), true);
+      return false;
+    }
+  }
+
+  function renderDetail() {
+    var box = $("detail");
+    box.innerHTML = "";
+    var e = H.sel;
+    if (!e) { return; }
+    var hc = H.hcols || {};
+
+    if (hc.choice) {
+      var f1 = D.createElement("div"); f1.className = "fcol";
+      var l1 = D.createElement("label"); l1.textContent = "Note";
+      var stars = D.createElement("div"); stars.className = "stars";
+      stars.setAttribute("role", "group"); stars.setAttribute("aria-label", "Note");
+      var choices = hc.choice.choices;
+      var btns = [];
+      function paint() {
+        var level = choices.indexOf(e.choice) + 1; // 0 = aucune étoile
+        btns.forEach(function (b, i) {
+          b.className = i < level ? "on" : "";
+          b.setAttribute("aria-pressed", String(i < level));
+        });
+      }
+      for (var k = 0; k < 5; k++) {
+        (function (n) {
+          var b = D.createElement("button");
+          b.type = "button"; b.textContent = "\u2605";
+          b.title = choices[n - 1] !== undefined ? String(choices[n - 1]) : "";
+          b.disabled = choices[n - 1] === undefined;
+          b.onclick = async function () {
+            var prev = e.choice;
+            // recliquer sur la dernière étoile active remet la valeur à vide
+            var value = (choices[n - 1] === e.choice) ? "" : choices[n - 1];
+            e.choice = value; paint();
+            var ok = await saveExtra("choice", value);
+            if (!ok) { e.choice = prev; paint(); }
+          };
+          btns.push(b); stars.appendChild(b);
+        })(k + 1);
+      }
+      paint();
+      f1.appendChild(l1); f1.appendChild(stars); box.appendChild(f1);
+    }
+
+    if (hc.photo) {
+      var fitRow = D.createElement("div"); fitRow.className = "fit-row";
+      var fitLbl = D.createElement("span"); fitLbl.textContent = "Ajuster à la largeur";
+      var sw = D.createElement("button");
+      sw.type = "button"; sw.className = "switch"; sw.setAttribute("role", "switch");
+      sw.setAttribute("aria-label", "Ajuster à la largeur");
+      sw.setAttribute("aria-checked", String(H.fit));
+      fitRow.appendChild(fitLbl); fitRow.appendChild(sw); box.appendChild(fitRow);
+
+      var th = D.createElement("div"); th.className = "thumbs" + (H.fit ? " fit" : "");
+      sw.onclick = function () {
+        H.fit = !H.fit;
+        sw.setAttribute("aria-checked", String(H.fit));
+        th.classList.toggle("fit", H.fit);
+      };
+      var ids = Array.isArray(e.photo) ? e.photo.filter(function (v) { return typeof v === "number"; }) : [];
+      if (!ids.length) {
+        var none = D.createElement("span"); none.className = "hint"; none.textContent = "Pas de photo";
+        th.appendChild(none);
+      }
+      ids.forEach(function (id) {
+        var img = D.createElement("img");
+        img.alt = "Photo"; img.src = attUrl(id);
+        th.appendChild(img);
+      });
+      box.appendChild(th);
+    }
+
+    var st = D.createElement("div"); st.id = "detailStatus"; st.className = "status";
+    box.appendChild(st);
+  }
+
   function renderPreview() {
     var body = $("pvBody");
     body.innerHTML = "";
     $("hApply").disabled = !H.sel;
+    renderDetail();
     if (!H.sel) { return; }
     var shown = 0;
     CHOICES.forEach(function (c) {
