@@ -127,7 +127,7 @@
   .dlg-head h2 { margin: 0; font-size: 14px; letter-spacing: .12em; text-transform: uppercase; }
   .xbtn { border: 0; background: var(--surface); color: var(--text); width: 30px; height: 30px; border-radius: 50%; font-size: 18px; line-height: 1; cursor: pointer; }
   .xbtn:hover { background: var(--border); }
-  .dlg-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(200px, 290px) 1fr; gap: 16px; padding: 14px 18px; overflow: auto; }
+  .dlg-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(170px, 270px) 1fr; gap: 14px; padding: 14px 18px; overflow: auto; }
   .left { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
   .field { display: flex; align-items: center; gap: 10px; }
   .field label { width: 52px; color: var(--muted); font-weight: 600; }
@@ -142,7 +142,7 @@
   .date:hover { background: var(--border); }
   .date[aria-selected="true"] { background: var(--accent); color: #fff; font-weight: 600; }
   .empty { color: var(--muted); padding: 16px; text-align: center; }
-  .preview { display: flex; flex-direction: column; min-height: 260px; min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .preview { display: flex; flex-direction: column; min-height: 180px; min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
   .pv-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .pv-head input[type=range] { width: 150px; accent-color: var(--slider); }
   #pvBody { flex: 1; overflow: auto; padding: 14px; display: flex; flex-wrap: wrap; gap: 12px; align-content: flex-start; align-items: flex-start; }
@@ -160,7 +160,7 @@
   body.win { display: block; padding: 0; }
   .win .overlay { padding: 0; background: var(--bg); backdrop-filter: none; }
   .win .dlg { width: 100%; height: 100%; border: 0; border-radius: 0; box-shadow: none; }
-  @media (max-width: 640px) {
+  @media (max-width: 460px) {
     .dlg-body { grid-template-columns: 1fr; }
     .dates { max-height: 200px; }
   }
@@ -498,7 +498,7 @@
     return H.tok ? H.tok.baseUrl + "/attachments/" + id + "/download?auth=" + H.tok.token : "";
   }
   function option(value, label) {
-    var o = document.createElement("option");
+    var o = D.createElement("option");
     o.value = value; o.textContent = label;
     return o;
   }
@@ -560,7 +560,7 @@
       }
     } catch (e) {
       $("dateList").innerHTML = "";
-      var err = document.createElement("div");
+      var err = D.createElement("div");
       err.className = "empty"; err.textContent = "Lecture impossible : " + (e && e.message ? e.message : e);
       $("dateList").appendChild(err);
       return;
@@ -610,7 +610,7 @@
       box.innerHTML = '<div class="empty">Aucun enregistrement.</div>';
     }
     list.forEach(function (e) {
-      var b = document.createElement("button");
+      var b = D.createElement("button");
       b.type = "button"; b.className = "date"; b.setAttribute("role", "option");
       b.setAttribute("aria-selected", String(e === H.sel));
       b.textContent = fmtDate(e.date);
@@ -635,20 +635,20 @@
       var id = H.sel.ids[c];
       if (!id || H.idx[id] === undefined) { return; }
       shown++;
-      var fig = document.createElement("figure");
+      var fig = D.createElement("figure");
       fig.className = "ph";
       var att = photoColumn ? firstAttachment((H.data[photoColumn] || [])[H.idx[id]]) : null;
       if (att) {
-        var img = document.createElement("img");
-        img.loading = "lazy"; img.decoding = "async"; img.alt = c; img.src = attUrl(att);
+        var img = D.createElement("img");
+        img.decoding = "async"; img.alt = c; img.src = attUrl(att);
         fig.appendChild(img);
       } else {
-        var none = document.createElement("div");
+        var none = D.createElement("div");
         none.className = "none";
         none.textContent = photoColumn ? "Pas de photo" : "Associez la colonne Photo";
         fig.appendChild(none);
       }
-      var cap = document.createElement("figcaption");
+      var cap = D.createElement("figcaption");
       cap.textContent = c;
       var colors = CHOICE_COLORS[c];
       if (colors && colors.fill) { cap.style.background = colors.fill; cap.style.color = colors.text || "#fff"; }
