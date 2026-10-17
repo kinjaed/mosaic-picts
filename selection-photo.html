@@ -146,9 +146,9 @@
   .pv-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .pv-head input[type=range] { width: 150px; accent-color: var(--slider); }
   #pvBody { flex: 1; overflow: auto; padding: 14px; display: flex; flex-wrap: wrap; gap: 12px; align-content: flex-start; align-items: flex-start; }
-  figure.ph { position: relative; margin: 0; border-radius: 12px; overflow: hidden; background: var(--border); box-shadow: 0 2px 8px rgba(0, 0, 0, .18); }
-  figure.ph img { display: block; height: var(--th, 160px); width: auto; }
-  figure.ph .none { display: flex; align-items: center; justify-content: center; height: var(--th, 160px); width: calc(var(--th, 160px) * .75); color: var(--muted); font-size: 12px; text-align: center; padding: 8px; }
+  figure.ph { position: relative; margin: 0; width: var(--th, 160px); max-width: 100%; border-radius: 12px; overflow: hidden; background: var(--border); box-shadow: 0 2px 8px rgba(0, 0, 0, .18); }
+  figure.ph img { display: block; width: 100%; height: auto; min-height: 40px; cursor: zoom-in; }
+  figure.ph .none { display: flex; align-items: center; justify-content: center; width: 100%; aspect-ratio: 3 / 4; color: var(--muted); font-size: 12px; text-align: center; padding: 8px; }
   figure.ph figcaption { position: absolute; left: 6px; bottom: 6px; max-width: calc(100% - 12px); padding: 2px 8px; border-radius: 999px; font-size: 10.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: rgba(20, 20, 30, .72); color: #fff; }
   .dlg-foot { display: flex; justify-content: space-between; padding: 12px 18px; border-top: 1px solid var(--border); background: var(--surface); }
   .btn { font: inherit; font-weight: 600; padding: 8px 24px; border-radius: 999px; cursor: pointer; border: 1.5px solid var(--border); }
@@ -162,7 +162,7 @@
   .detail label { color: var(--muted); font-weight: 600; }
   .detail select { width: 100%; padding: 7px 10px; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 10px; }
   .detail .thumbs { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
-  .detail .thumbs img { display: block; height: 170px; width: auto; max-width: 100%; object-fit: cover; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,.18); }
+  .detail .thumbs img { cursor: zoom-in; display: block; height: 170px; width: auto; max-width: 100%; object-fit: cover; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,.18); }
   .detail .stars { display: flex; gap: 2px; }
   .detail .stars button { border: 0; background: transparent; padding: 0 2px; font-size: 30px; line-height: 1; cursor: pointer; color: #b5b5c0; transition: color .1s ease, transform .05s ease; }
   .detail .stars button.on { color: #f5c518; }
@@ -176,6 +176,18 @@
   .detail .thumbs.fit img { width: 100%; height: auto; max-width: 100%; object-fit: contain; }
   .detail .status { font-size: 11px; color: var(--muted); min-height: 14px; }
   .detail .status.error { color: var(--danger); }
+  /* ---- Aperçu en grand (prend toute la place du widget) ---- */
+  .lb { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; padding: 8px; background: rgba(18, 18, 30, .94); cursor: zoom-out; }
+  .lb img { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; border-radius: 8px; }
+  .lb .lb-x { position: absolute; top: 8px; right: 8px; background: rgba(255, 255, 255, .85); color: #222; }
+  .lb .lb-cap { position: absolute; left: 12px; bottom: 12px; padding: 3px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; background: rgba(0, 0, 0, .7); color: #fff; }
+
+  /* ---- Date déjà enregistrée : remplacer / ajouter ---- */
+  #dupOverlay { z-index: 60; }
+  .dup { width: min(380px, 100%); display: flex; flex-direction: column; gap: 14px; padding: 16px 18px; background: var(--bg); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 16px 40px rgba(0, 0, 0, .35); }
+  .dup p { margin: 0; line-height: 1.45; }
+  .dup-btns { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+  .dup .btn { padding: 6px 16px; }
   body.win { display: block; padding: 0; }
   .win .overlay { padding: 0; background: var(--bg); backdrop-filter: none; }
   .win .dlg { width: 100%; height: 100%; border: 0; border-radius: 0; box-shadow: none; }
@@ -215,6 +227,17 @@
   </div>
   <div id="gBody" class="g-body"></div>
 </section>
+</div>
+
+<div id="dupOverlay" class="overlay" role="dialog" aria-modal="true">
+  <div class="dup">
+    <p id="dupMsg"></p>
+    <div class="dup-btns">
+      <button id="dupCancel" class="btn ghost" type="button">Annuler</button>
+      <button id="dupAdd" class="btn ghost" type="button">Ajouter</button>
+      <button id="dupReplace" class="btn primary" type="button">Remplacer</button>
+    </div>
+  </div>
 </div>
 
 <div id="overlay" class="overlay" role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
@@ -435,6 +458,29 @@
     return cols;
   }
 
+  // Propose de remplacer ou d'ajouter quand la date existe déjà. Renvoie "replace", "add" ou null.
+  function askDuplicate(count, day) {
+    return new Promise(function (resolve) {
+      var ov = document.getElementById("dupOverlay");
+      document.getElementById("dupMsg").textContent = (count > 1
+        ? count + " enregistrements existent déjà pour le "
+        : "Un enregistrement existe déjà pour le ") + fmtDate(day) + ". Que faire ?"
+        + (count > 1 ? " (« Remplacer » modifie le plus récent.)" : "");
+      function done(r) {
+        ov.classList.remove("on");
+        document.removeEventListener("keydown", onKey, true);
+        resolve(r);
+      }
+      function onKey(ev) { if (ev.key === "Escape") { ev.stopImmediatePropagation(); done(null); } }
+      document.addEventListener("keydown", onKey, true);
+      document.getElementById("dupReplace").onclick = function () { done("replace"); };
+      document.getElementById("dupAdd").onclick = function () { done("add"); };
+      document.getElementById("dupCancel").onclick = function () { done(null); };
+      ov.classList.add("on");
+      document.getElementById("dupReplace").focus();
+    });
+  }
+
   async function saveHistory() {
     if (!choiceColumn || !choicesLoaded || !CHOICES.length) {
       alert("Associez d'abord la colonne à choix unique dans le panneau de droite.");
@@ -473,13 +519,20 @@
 
       var raw = await grist.docApi.fetchTable(HIST_TABLE);
       var dates = raw[cols.Date.colId] || [];
-      var existing = dates.indexOf(day);
-      if (existing !== -1) {
-        if (!confirm("Un enregistrement existe déjà pour le " + fmtDate(day) + ". Le remplacer ?")) {
+      var matches = [];
+      dates.forEach(function (d, i) { if (d === day) { matches.push(i); } });
+      var mode = "add";
+      if (matches.length) {
+        mode = await askDuplicate(matches.length, day);
+        if (!mode) {
           el.save.disabled = false;
           return;
         }
-        await grist.docApi.applyUserActions([["UpdateRecord", HIST_TABLE, raw.id[existing], fields]]);
+      }
+      if (mode === "replace") {
+        // remplace l'enregistrement le plus récent (plus grand ID) de cette date
+        var target = matches.reduce(function (best, i) { return raw.id[i] > raw.id[best] ? i : best; }, matches[0]);
+        await grist.docApi.applyUserActions([["UpdateRecord", HIST_TABLE, raw.id[target], fields]]);
       } else {
         await grist.docApi.applyUserActions([["AddRecord", HIST_TABLE, null, fields]]);
       }
@@ -520,6 +573,40 @@
   function attUrl(id) {
     return H.tok ? H.tok.baseUrl + "/attachments/" + id + "/download?auth=" + H.tok.token : "";
   }
+  /* Aperçu en grand : recouvre tout le widget (ou la fenêtre Historique).
+     Clic, bouton × ou Échap pour fermer. */
+  var LB = null;
+  function closeLightbox() {
+    if (!LB) { return; }
+    try { LB.doc.removeEventListener("keydown", LB.key, true); } catch (e) { /* fenêtre fermée */ }
+    try { LB.el.remove(); } catch (e) { /* déjà retiré */ }
+    LB = null;
+  }
+  function openLightbox(src, caption, colors, doc) {
+    if (!src) { return; }
+    closeLightbox();
+    doc = doc || document;
+    var lb = doc.createElement("div");
+    lb.className = "lb";
+    var img = doc.createElement("img");
+    img.alt = caption || "Photo"; img.src = src;
+    lb.appendChild(img);
+    var x = doc.createElement("button");
+    x.type = "button"; x.className = "xbtn lb-x"; x.setAttribute("aria-label", "Fermer"); x.textContent = "\u00d7";
+    lb.appendChild(x);
+    if (caption) {
+      var cap = doc.createElement("div");
+      cap.className = "lb-cap"; cap.textContent = caption;
+      if (colors && colors.fill) { cap.style.background = colors.fill; cap.style.color = colors.text || "#fff"; }
+      lb.appendChild(cap);
+    }
+    lb.addEventListener("click", closeLightbox);
+    var key = function (ev) { if (ev.key === "Escape") { ev.stopImmediatePropagation(); ev.preventDefault(); closeLightbox(); } };
+    doc.addEventListener("keydown", key, true);
+    doc.body.appendChild(lb);
+    LB = { el: lb, doc: doc, key: key };
+  }
+
   function option(value, label) {
     var o = D.createElement("option");
     o.value = value; o.textContent = label;
@@ -527,6 +614,7 @@
   }
 
   function closeHistory() {
+    closeLightbox();
     var p = popup;
     popup = null; D = document; W = window;
     $("overlay").classList.remove("on");
@@ -583,7 +671,14 @@
           if (H.hcols.photo) { ent.photo = (raw[H.hcols.photo.colId] || [])[i] || null; }
           H.entries.push(ent);
         });
-        H.entries.sort(function (a, b) { return b.date - a.date; });
+        H.entries.sort(function (a, b) { return b.date - a.date || b.rowId - a.rowId; });
+        var tot = {}, nth = {};
+        H.entries.forEach(function (e) { tot[e.date] = (tot[e.date] || 0) + 1; });
+        for (var q = H.entries.length - 1; q >= 0; q--) {
+          var en = H.entries[q];
+          nth[en.date] = (nth[en.date] || 0) + 1;
+          if (tot[en.date] > 1) { en.nth = nth[en.date] + "/" + tot[en.date]; }
+        }
       }
     } catch (e) {
       $("dateList").innerHTML = "";
@@ -640,7 +735,7 @@
       var b = D.createElement("button");
       b.type = "button"; b.className = "date"; b.setAttribute("role", "option");
       b.setAttribute("aria-selected", String(e === H.sel));
-      b.textContent = fmtDate(e.date);
+      b.textContent = fmtDate(e.date) + (e.nth ? "  (" + e.nth + ")" : "");
       b.addEventListener("click", function () {
         H.sel = e;
         box.querySelectorAll(".date").forEach(function (x) { x.setAttribute("aria-selected", String(x === b)); });
@@ -753,6 +848,7 @@
       ids.forEach(function (id) {
         var img = D.createElement("img");
         img.alt = "Photo"; img.src = attUrl(id);
+        img.addEventListener("click", function () { openLightbox(img.src, "", null, D); });
         th.appendChild(img);
       });
       box.appendChild(th);
@@ -779,6 +875,7 @@
       if (att) {
         var img = D.createElement("img");
         img.decoding = "async"; img.alt = c; img.src = attUrl(att);
+        img.addEventListener("click", function () { openLightbox(img.src, c, CHOICE_COLORS[c], D); });
         fig.appendChild(img);
       } else {
         var none = D.createElement("div");
@@ -917,6 +1014,7 @@
               var img = document.createElement("img");
               img.loading = "lazy"; img.decoding = "async"; img.alt = it.choice;
               img.src = tok.baseUrl + "/attachments/" + it.att + "/download?auth=" + tok.token;
+              img.addEventListener("click", function () { openLightbox(img.src, it.choice, CHOICE_COLORS[it.choice]); });
               fig.appendChild(img);
             } else {
               var none = document.createElement("div");
