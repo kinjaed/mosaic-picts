@@ -97,7 +97,21 @@
   .sw input:checked + .track { background: var(--accent); }
   .sw input:checked + .track::after { transform: translateX(16px); }
   .sw input:focus-visible + .track { outline: 2px solid var(--slider); outline-offset: 2px; }
+  .hb-head { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; }
+  .hb-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .hb-right { justify-self: end; }
+  .hb-type, select.hb-note, input.hb-note {
+    font: inherit; font-size: 12px; color: var(--text); background: var(--bg); color-scheme: light dark;
+    border: 1px solid var(--edge); border-radius: 8px; padding: 3px 8px; max-width: 100%;
+  }
+  .hb-type { border-radius: 999px; padding: 3px 12px; min-width: 150px; }
+  select.hb-note, input.hb-note { width: 100%; min-width: 90px; }
+  input.hb-note { text-align: right; }
+  .hb-note:disabled { opacity: .55; }
   .hb-body { flex: 1; min-height: 0; overflow: auto; }
+  table.hb tbody tr { cursor: pointer; }
+  table.hb tbody tr.sel td { background: rgba(22, 179, 120, .22); }
+  table.hb tbody tr.sel td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
   table.hb { border-collapse: collapse; width: 100%; font-size: 12px; }
   table.hb th { position: sticky; top: 0; z-index: 1; padding: 6px 10px; text-align: left; white-space: nowrap; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: var(--panel-a); border-bottom: 1px solid var(--border); }
   table.hb td { padding: 4px 10px; vertical-align: middle; border-bottom: 1px solid var(--border); }
@@ -241,10 +255,13 @@
   <div id="gBody" class="g-body"></div>
 </section>
 <section id="habits" class="panel habits">
-  <div class="g-head">
-    <span class="g-title">Liste des habits</span>
-    <span id="hbCount" class="g-count"></span>
-    <label class="sw" title="Afficher uniquement les lignes dont la colonne Select n'est pas vide">
+  <div class="g-head hb-head">
+    <div class="hb-left">
+      <span class="g-title">Liste des habits</span>
+      <span id="hbCount" class="g-count"></span>
+    </div>
+    <select id="hbType" class="hb-type" aria-label="Type de vêtement" title="Filtrer par type de vêtement (table Type)"></select>
+    <label class="sw hb-right" title="Afficher uniquement les lignes dont la colonne Select n'est pas vide">
       <span>Sélectionnés</span>
       <input type="checkbox" id="hbSel">
       <span class="track"></span>
@@ -391,7 +408,7 @@
     el.bar.innerHTML = "";
 
     if (currentRowId == null) {
-      setHint("Sélectionnez une ligne dans le tableau lié");
+      setHint("Sélectionnez une ligne dans le tableau « Liste des habits »");
       return;
     }
 
@@ -436,6 +453,7 @@
 
       await grist.selectedTable.update({ id: currentRowId, fields: fieldsWith(choiceColumn, value) });
       currentValue = value;
+      HB.valById[currentRowId] = value;
     } catch (e) {
       setHint("Échec de l'enregistrement : " + (e && e.message ? e.message : e), true);
       busy = false;
@@ -444,6 +462,8 @@
 
     busy = false;
     render();
+    scheduleHabits();
+    scheduleGallery();
   }
 
   /* -----------------------------------------------------------
@@ -1106,7 +1126,8 @@
      ----------------------------------------------------------- */
   var HABITS_TABLE = "Mes_habits";
   var HABIT_COLS = ["Emplacement", "Marque", "Description", "nb", "Note", "Photo", "A_ranger"];
-  var HB = { busy: false, again: false, sig: null, timer: null, only: false, meta: null };
+  var HB = { busy: false, again: false, sig: null, timer: null, only: false, meta: null,
+            selectedId: null, cursorId: null, valById: {}, typeSel: "", types: [], typeSig: null };
 
   async function habitsMeta() {
     if (HB.meta) { return HB.meta; }
@@ -1120,7 +1141,12 @@
     var meta = {};
     for (var j = 0; j < C.id.length; j++) {
       if (C.parentId[j] === ref) {
-        meta[C.colId[j]] = { type: C.type[j] || "Any", label: C.label[j] || C.colId[j], visible: nameById[C.visibleCol[j]] || null };
+        var wo = {};
+        try { wo = JSON.parse(C.widgetOptions[j] || "{}"); } catch (e) { wo = {}; }
+        meta[C.colId[j]] = {
+          type: C.type[j] || "Any", label: C.label[j] || C.colId[j], visible: nameById[C.visibleCol[j]] || null,
+          choices: Array.isArray(wo.choices) ? wo.choices : [], colors: wo.choiceOptions || {}
+        };
       }
     }
     HB.meta = meta;
@@ -1187,15 +1213,30 @@
         habitsMessage("Table « " + HABITS_TABLE + " » introuvable.");
       } else {
         var data = await grist.docApi.fetchTable(HABITS_TABLE);
+        HB.valById = {};
+        if (choiceColumn && data[choiceColumn]) { data.id.forEach(function (id, i) { HB.valById[id] = data[choiceColumn][i]; }); }
+        fillTypes(await loadTypes());
+        var linkCol = typeLinkCol(meta);
+        var typeName = "";
+        HB.types.forEach(function (t) { if (String(t.id) === HB.typeSel) { typeName = t.name; } });
         if (HB.only && !data.Select) {
           habitsMessage("Colonne « Select » introuvable dans " + HABITS_TABLE + ".");
+        } else if (HB.typeSel !== "" && !linkCol) {
+          habitsMessage("Aucune colonne de " + HABITS_TABLE + " n'est liée à la table Type.");
         } else {
           var cols = HABIT_COLS.filter(function (c) { return data[c]; });
           var refs = await habitsRefs(meta, cols);
           var rows = [];
           data.id.forEach(function (id, i) {
             if (HB.only && isEmptyVal(data.Select[i], meta.Select && meta.Select.type)) { return; }
-            var r = { id: id, att: null, cells: [] };
+            if (HB.typeSel !== "") {
+              var lv = data[linkCol][i];
+              var ok = /^Ref/.test(meta[linkCol].type)
+                ? listItems(lv).map(String).indexOf(HB.typeSel) !== -1
+                : String(lv) === typeName;
+              if (!ok) { return; }
+            }
+            var r = { id: id, att: null, cells: [], note: data.Note ? data.Note[i] : null };
             cols.forEach(function (c) {
               if (c === "Photo") { r.att = firstAttachment(data.Photo[i]); r.cells.push(""); }
               else { r.cells.push(cellText(c, data[c][i], meta, refs)); }
@@ -1223,6 +1264,13 @@
             var tbody = document.createElement("tbody");
             rows.forEach(function (r) {
               var tr = document.createElement("tr");
+              tr.setAttribute("data-id", r.id);
+              if (r.id === HB.selectedId) { tr.className = "sel"; }
+              tr.addEventListener("click", function () {
+                HB.selectedId = r.id;
+                markSelected(false);
+                syncSelection();
+              });
               cols.forEach(function (c, ci) {
                 var td = document.createElement("td");
                 if (c === "Photo") {
@@ -1234,6 +1282,8 @@
                     img.addEventListener("click", function () { openLightbox(img.src, r.title, null); });
                     td.appendChild(img);
                   }
+                } else if (c === "Note") {
+                  noteEditor(td, r, meta.Note);
                 } else {
                   var type = (meta[c] && meta[c].type) || "";
                   if (type === "Bool") { td.className = "c"; }
@@ -1256,11 +1306,132 @@
           }
         }
       }
+      syncSelection();
     } catch (e) {
       habitsMessage("Liste indisponible : " + (e && e.message ? e.message : e));
     }
     HB.busy = false;
     if (HB.again) { HB.again = false; refreshHabits(); }
+  }
+
+  // Ligne sélectionnée dans le tableau = ligne ciblée par les boutons de choix du haut
+  function syncSelection() {
+    var id = HB.selectedId;
+    var v = (id != null && Object.prototype.hasOwnProperty.call(HB.valById, id)) ? HB.valById[id] : null;
+    if (id !== currentRowId || v !== currentValue) {
+      currentRowId = id;
+      currentValue = v;
+      if (!busy) { render(); }
+    }
+  }
+
+  function markSelected(scroll) {
+    var rows = document.querySelectorAll("#hbBody tbody tr");
+    for (var i = 0; i < rows.length; i++) {
+      var on = rows[i].getAttribute("data-id") === String(HB.selectedId);
+      rows[i].classList.toggle("sel", on);
+      if (on && scroll && rows[i].scrollIntoView) { rows[i].scrollIntoView({ block: "nearest" }); }
+    }
+  }
+
+  // Colonne Note modifiable : liste déroulante des valeurs du choix unique
+  function noteEditor(td, r, m) {
+    m = m || { type: "Any", choices: [], colors: {} };
+    function save(value, ctrl, previous) {
+      ctrl.disabled = true;
+      grist.docApi.applyUserActions([["UpdateRecord", HABITS_TABLE, r.id, { Note: value }]])
+        .then(function () { ctrl.disabled = false; scheduleHabits(); })
+        .catch(function (err) {
+          ctrl.disabled = false;
+          if ("value" in ctrl) { ctrl.value = previous; }
+          alert("Modification impossible : " + (err && err.message ? err.message : err));
+        });
+    }
+    var raw = r.note;
+    if (m.type === "Choice") {
+      var sel = document.createElement("select");
+      sel.className = "hb-note";
+      var cur = (raw === null || raw === undefined) ? "" : String(raw);
+      var list = [""].concat(m.choices);
+      if (cur !== "" && list.indexOf(cur) === -1) { list.push(cur); }
+      list.forEach(function (c) {
+        var o = document.createElement("option");
+        o.value = c; o.textContent = c;
+        sel.appendChild(o);
+      });
+      sel.value = cur;
+      var paint = function () {
+        var co = m.colors[sel.value];
+        sel.style.background = co && co.fillColor ? co.fillColor : "";
+        sel.style.color = co && co.textColor ? co.textColor : "";
+      };
+      paint();
+      var prev = cur;
+      sel.addEventListener("change", function () {
+        paint();
+        var old = prev; prev = sel.value;
+        save(sel.value === "" ? null : sel.value, sel, old);
+      });
+      td.appendChild(sel);
+    } else if (m.type === "Int" || m.type === "Numeric" || m.type === "Text" || m.type === "Any") {
+      var inp = document.createElement("input");
+      var numeric = (m.type === "Int" || m.type === "Numeric");
+      inp.type = numeric ? "number" : "text";
+      inp.className = "hb-note";
+      inp.value = (raw === null || raw === undefined) ? "" : String(raw);
+      var before = inp.value;
+      inp.addEventListener("change", function () {
+        var old = before; before = inp.value;
+        var v = inp.value.trim() === "" ? null : (numeric ? Number(inp.value) : inp.value);
+        save(v, inp, old);
+      });
+      td.appendChild(inp);
+    } else {
+      td.textContent = r.cells[HABIT_COLS.indexOf("Note")] || "";
+    }
+  }
+
+  /* Liste déroulante « Type » : valeurs de Type.Vetement, par ordre alphabétique.
+     Filtre les lignes de Mes_habits sur la colonne liée à la table Type. */
+  async function loadTypes() {
+    try {
+      var t = await grist.docApi.fetchTable("Type");
+      if (!t.Vetement) { return null; }
+      var list = [];
+      t.id.forEach(function (id, i) {
+        var n = (t.Vetement[i] === null || t.Vetement[i] === undefined) ? "" : String(t.Vetement[i]).trim();
+        if (n !== "") { list.push({ id: id, name: n }); }
+      });
+      list.sort(function (a, b) { return a.name.localeCompare(b.name, "fr", { sensitivity: "base" }); });
+      return list;
+    } catch (e) { return null; }
+  }
+
+  function fillTypes(list) {
+    var sig = list ? JSON.stringify(list) : "none";
+    if (sig === HB.typeSig) { return; }
+    HB.typeSig = sig;
+    HB.types = list || [];
+    var sel = document.getElementById("hbType");
+    sel.innerHTML = "";
+    var all = document.createElement("option");
+    all.value = ""; all.textContent = "Tous les types";
+    sel.appendChild(all);
+    HB.types.forEach(function (t) {
+      var o = document.createElement("option");
+      o.value = String(t.id); o.textContent = t.name;
+      sel.appendChild(o);
+    });
+    if (!HB.types.some(function (t) { return String(t.id) === HB.typeSel; })) { HB.typeSel = ""; }
+    sel.value = HB.typeSel;
+    sel.disabled = !list;
+    sel.title = list ? "Filtrer par type de vêtement (table Type)" : "Table « Type » ou colonne « Vetement » introuvable";
+  }
+
+  // Colonne de Mes_habits liée à la table Type (Ref:Type), à défaut « Vetement » ou « Type »
+  function typeLinkCol(meta) {
+    for (var k in meta) { if (/^Ref(List)?:Type$/.test(meta[k].type)) { return k; } }
+    return meta.Vetement ? "Vetement" : (meta.Type ? "Type" : null);
   }
 
   function scheduleHabits() {
@@ -1270,6 +1441,11 @@
 
   try { HB.only = localStorage.getItem("selectionPhoto.only") === "1"; } catch (e) { /* valeur par défaut */ }
   document.getElementById("hbSel").checked = HB.only;
+  document.getElementById("hbType").addEventListener("change", function (ev) {
+    HB.typeSel = ev.target.value;
+    HB.sig = null;
+    scheduleHabits();
+  });
   document.getElementById("hbSel").addEventListener("change", function (ev) {
     HB.only = ev.target.checked;
     try { localStorage.setItem("selectionPhoto.only", HB.only ? "1" : "0"); } catch (e) { /* non mémorisé */ }
@@ -1293,8 +1469,14 @@
   grist.onRecord(async function (record, mappings) {
     choiceColumn = mappings && mappings.Choix;
     photoColumn = (mappings && mappings.Photo) || null;
-    currentRowId = record ? record.id : null;
-    currentValue = (choiceColumn && record) ? record[choiceColumn] : null;
+    // Le curseur Grist ne change la sélection que lorsqu'il se déplace réellement
+    if (record && record.id !== HB.cursorId) {
+      HB.cursorId = record.id;
+      HB.selectedId = record.id;
+      markSelected(true);
+    }
+    if (record && choiceColumn && record.id === HB.selectedId) { HB.valById[record.id] = record[choiceColumn]; }
+    syncSelection();
 
     await loadChoices();
     render();
@@ -1307,8 +1489,10 @@
 
 
   grist.onNewRecord(function () {
-    currentRowId = null;
-    currentValue = null;
+    HB.cursorId = null;
+    HB.selectedId = null;
+    markSelected(false);
+    syncSelection();
     render();
   });
 })();
