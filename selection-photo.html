@@ -97,21 +97,36 @@
   .sw input:checked + .track { background: var(--accent); }
   .sw input:checked + .track::after { transform: translateX(16px); }
   .sw input:focus-visible + .track { outline: 2px solid var(--slider); outline-offset: 2px; }
-  .hb-head { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; }
+  .hb-head { display: flex; align-items: center; gap: 10px; }
   .hb-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
-  .hb-right { justify-self: end; }
-  .hb-type, select.hb-note, input.hb-note {
+  .hb-right { margin-left: auto; }
+  select.hb-note, input.hb-note {
     font: inherit; font-size: 12px; color: var(--text); background: var(--bg); color-scheme: light dark;
     border: 1px solid var(--edge); border-radius: 8px; padding: 3px 8px; max-width: 100%;
   }
-  .hb-type { border-radius: 999px; padding: 3px 12px; min-width: 150px; }
-  select.hb-note, input.hb-note { width: 100%; min-width: 90px; }
-  input.hb-note { text-align: right; }
+  select.hb-note, input.hb-note { width: auto; min-width: 0; text-align: center; text-align-last: center; }
+  input.hb-note { width: 5em; }
   .hb-note:disabled { opacity: .55; }
-  .hb-body { flex: 1; min-height: 0; overflow: auto; }
+  .hb-main { flex: 1; min-height: 0; display: flex; }
+  .hb-types { flex: none; width: 170px; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 2px; border-right: 1px solid var(--border); }
+  .tp { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 8px 12px; text-align: left;
+        font: inherit; font-size: 13px; color: var(--text); background: transparent; border: 1.5px solid transparent; border-radius: 999px; cursor: pointer; }
+  .tp:hover { background: var(--surface); }
+  .tp.on { font-weight: 700; background: rgba(56, 152, 214, .16); border-color: #2b86c5; }
+  .tp .tp-l { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tp .tp-n { flex: none; font-size: 12px; font-weight: 400; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .tp.on .tp-n { color: #2b86c5; font-weight: 600; }
+  .tp.zero { opacity: .5; }
+  .hb-body { flex: 1; min-width: 0; min-height: 0; overflow: auto; }
+  table.hb th.min, table.hb td.min { width: 1%; white-space: nowrap; text-align: center; }
+  button.plus { width: 16px; height: 16px; margin-left: 6px; padding: 0; vertical-align: middle; font-size: 12px; line-height: 1; color: var(--text); background: var(--bg); border: 1px solid var(--edge); border-radius: 50%; cursor: pointer; }
+  button.plus:hover { color: #fff; background: var(--accent); border-color: var(--accent); }
+  .lb .lb-rm { position: absolute; right: 12px; bottom: 12px; padding: 7px 16px; font: inherit; font-size: 13px; font-weight: 600; color: #fff; background: #d64545; border: 0; border-radius: 999px; cursor: pointer; }
+  .lb .lb-rm:hover { background: #bf3535; }
+  .lb .lb-rm:disabled { opacity: .6; cursor: default; }
   table.hb tbody tr { cursor: pointer; }
-  table.hb tbody tr.sel td { background: rgba(22, 179, 120, .22); }
-  table.hb tbody tr.sel td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+  table.hb tbody tr.sel td { box-shadow: inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent); }
+  table.hb tbody tr.sel td:first-child { box-shadow: inset 3px 0 0 var(--accent), inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent); }
   table.hb { border-collapse: collapse; width: 100%; font-size: 12px; }
   table.hb th { position: sticky; top: 0; z-index: 1; padding: 6px 10px; text-align: left; white-space: nowrap; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: var(--panel-a); border-bottom: 1px solid var(--border); }
   table.hb td { padding: 4px 10px; vertical-align: middle; border-bottom: 1px solid var(--border); }
@@ -211,7 +226,7 @@
   .lb .lb-cap { position: absolute; left: 12px; bottom: 12px; padding: 3px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; background: rgba(0, 0, 0, .7); color: #fff; }
 
   /* ---- Date déjà enregistrée : remplacer / ajouter ---- */
-  #dupOverlay { z-index: 60; }
+  #dupOverlay, #wornOverlay { z-index: 60; }
   .dup { width: min(380px, 100%); display: flex; flex-direction: column; gap: 14px; padding: 16px 18px; background: var(--bg); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 16px 40px rgba(0, 0, 0, .35); }
   .dup p { margin: 0; line-height: 1.45; }
   .dup-btns { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
@@ -260,14 +275,16 @@
       <span class="g-title">Liste des habits</span>
       <span id="hbCount" class="g-count"></span>
     </div>
-    <select id="hbType" class="hb-type" aria-label="Type de vêtement" title="Filtrer par type de vêtement (table Type)"></select>
     <label class="sw hb-right" title="Afficher uniquement les lignes dont la colonne Select n'est pas vide">
       <span>Sélectionnés</span>
       <input type="checkbox" id="hbSel">
       <span class="track"></span>
     </label>
   </div>
-  <div id="hbBody" class="hb-body"></div>
+  <div class="hb-main">
+    <aside id="hbTypes" class="hb-types" aria-label="Types de vêtements"></aside>
+    <div id="hbBody" class="hb-body"></div>
+  </div>
 </section>
 </div>
 
@@ -278,6 +295,16 @@
       <button id="dupCancel" class="btn ghost" type="button">Annuler</button>
       <button id="dupAdd" class="btn ghost" type="button">Ajouter</button>
       <button id="dupReplace" class="btn primary" type="button">Remplacer</button>
+    </div>
+  </div>
+</div>
+
+<div id="wornOverlay" class="overlay" role="dialog" aria-modal="true">
+  <div class="dup">
+    <p id="wornMsg"></p>
+    <div class="dup-btns">
+      <button id="wornNo" class="btn ghost" type="button">Non</button>
+      <button id="wornYes" class="btn primary" type="button">Oui</button>
     </div>
   </div>
 </div>
@@ -627,7 +654,7 @@
     try { LB.el.remove(); } catch (e) { /* déjà retiré */ }
     LB = null;
   }
-  function openLightbox(src, caption, colors, doc) {
+  function openLightbox(src, caption, colors, doc, onRemove) {
     if (!src) { return; }
     closeLightbox();
     doc = doc || document;
@@ -644,6 +671,16 @@
       cap.className = "lb-cap"; cap.textContent = caption;
       if (colors && colors.fill) { cap.style.background = colors.fill; cap.style.color = colors.text || "#fff"; }
       lb.appendChild(cap);
+    }
+    if (onRemove) {
+      var rm = doc.createElement("button");
+      rm.type = "button"; rm.className = "lb-rm"; rm.textContent = "Retirer de la sélection";
+      rm.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+        rm.disabled = true;
+        Promise.resolve(onRemove()).then(closeLightbox, function () { rm.disabled = false; });
+      });
+      lb.appendChild(rm);
     }
     lb.addEventListener("click", closeLightbox);
     var key = function (ev) { if (ev.key === "Escape") { ev.stopImmediatePropagation(); ev.preventDefault(); closeLightbox(); } };
@@ -1073,7 +1110,9 @@
               var img = document.createElement("img");
               img.loading = "lazy"; img.decoding = "async"; img.alt = it.choice;
               img.src = tok.baseUrl + "/attachments/" + it.att + "/download?auth=" + tok.token;
-              img.addEventListener("click", function () { openLightbox(img.src, it.choice, CHOICE_COLORS[it.choice]); });
+              img.addEventListener("click", function () {
+                openLightbox(img.src, it.choice, CHOICE_COLORS[it.choice], null, function () { return removeFromSelection(it.id); });
+              });
               fig.appendChild(img);
             } else {
               var none = document.createElement("div");
@@ -1125,9 +1164,14 @@
      dont la colonne Select n'est pas vide.
      ----------------------------------------------------------- */
   var HABITS_TABLE = "Mes_habits";
-  var HABIT_COLS = ["Emplacement", "Marque", "Description", "nb", "Note", "Photo", "A_ranger"];
-  var HB = { busy: false, again: false, sig: null, timer: null, only: false, meta: null,
-            selectedId: null, cursorId: null, valById: {}, typeSel: "", types: [], typeSig: null };
+  var HABIT_COLS = ["Emplacement", "Marque", "Couleur", "Taille", "Description", "nb", "Note", "Photo", "A_ranger"];
+  var MIN_COLS = { nb: 1, Note: 1, A_ranger: 1 };
+  var CANON = HABIT_COLS.concat(["Select", "Supprime", "Type"]);
+  var HB = { busy: false, again: false, sig: null, timer: null, only: false, meta: null, selRules: [],
+            selectedId: null, cursorId: null, valById: {}, nbById: {}, typeSel: "", typeSig: null };
+
+  // Comparaison de noms de colonnes sans tenir compte de la casse ni des accents
+  function norm(x) { return String(x).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase(); }
 
   async function habitsMeta() {
     if (HB.meta) { return HB.meta; }
@@ -1138,19 +1182,56 @@
     if (ref === null) { return null; }
     var nameById = {};
     for (var k = 0; k < C.id.length; k++) { nameById[C.id[k]] = C.colId[k]; }
-    var meta = {};
+    var meta = {}, selColRef = null, sets = [];
+    function ruleSet(rules, wo) {
+      var helpers = (Array.isArray(rules) ? listItems(rules) : []).map(function (id) { return nameById[id]; });
+      if (helpers.length) { sets.push({ helpers: helpers, styles: Array.isArray(wo.rulesOptions) ? wo.rulesOptions : [] }); }
+    }
     for (var j = 0; j < C.id.length; j++) {
       if (C.parentId[j] === ref) {
         var wo = {};
         try { wo = JSON.parse(C.widgetOptions[j] || "{}"); } catch (e) { wo = {}; }
         meta[C.colId[j]] = {
-          type: C.type[j] || "Any", label: C.label[j] || C.colId[j], visible: nameById[C.visibleCol[j]] || null,
+          colId: C.colId[j], type: C.type[j] || "Any", label: C.label[j] || C.colId[j], visible: nameById[C.visibleCol[j]] || null,
           choices: Array.isArray(wo.choices) ? wo.choices : [], colors: wo.choiceOptions || {}
         };
+        if (norm(C.colId[j]) === "select") {
+          selColRef = C.id[j];
+          ruleSet(C.rules ? C.rules[j] : null, wo);
+        }
       }
     }
+    // Mises en forme conditionnelles définies au niveau de la vue (champ) pour la colonne Select
+    if (selColRef !== null) {
+      try {
+        var F = await grist.docApi.fetchTable("_grist_Views_section_field");
+        for (var f = 0; f < F.id.length; f++) {
+          if (F.colRef[f] === selColRef && F.rules) {
+            var fwo = {};
+            try { fwo = JSON.parse(F.widgetOptions[f] || "{}"); } catch (e) { fwo = {}; }
+            ruleSet(F.rules[f], fwo);
+          }
+        }
+      } catch (e) { /* on retombe sur les couleurs du choix */ }
+    }
+    HB.selRules = sets;
     HB.meta = meta;
     return meta;
+  }
+
+  // Rend les noms de colonnes insensibles à la casse (nb / Nb, Supprime / Supprimé…)
+  function canonize(data, meta) {
+    var keys = Object.keys(data);
+    CANON.forEach(function (name) {
+      if (data[name] !== undefined) { return; }
+      for (var i = 0; i < keys.length; i++) {
+        if (norm(keys[i]) === norm(name)) {
+          data[name] = data[keys[i]];
+          if (meta[keys[i]]) { meta[name] = meta[keys[i]]; }
+          return;
+        }
+      }
+    });
   }
 
   // Charge les tables référencées (colonnes Ref / RefList) pour afficher leur texte plutôt que l'ID
@@ -1194,6 +1275,22 @@
     return String(v);
   }
 
+  // Style d'une ligne sélectionnée : mêmes mises en forme conditionnelles que la colonne Select
+  // (règles conditionnelles, sinon couleur du choix, sinon vert par défaut)
+  function rowStyle(i, v, data, meta) {
+    if (isEmptyVal(v, "")) { return null; }
+    for (var s = 0; s < HB.selRules.length; s++) {
+      var set = HB.selRules[s];
+      for (var k = 0; k < set.helpers.length; k++) {
+        var h = set.helpers[k];
+        if (h && data[h] && data[h][i] && set.styles[k]) { return set.styles[k]; }
+      }
+    }
+    var co = meta.Select && meta.Select.colors ? meta.Select.colors[String(v)] : null;
+    if (co && (co.fillColor || co.textColor)) { return co; }
+    return { fillColor: "rgba(22, 179, 120, .18)" };
+  }
+
   function habitsMessage(text) {
     var body = document.getElementById("hbBody");
     body.innerHTML = "";
@@ -1213,30 +1310,57 @@
         habitsMessage("Table « " + HABITS_TABLE + " » introuvable.");
       } else {
         var data = await grist.docApi.fetchTable(HABITS_TABLE);
-        HB.valById = {};
+        canonize(data, meta);
+        HB.valById = {}; HB.nbById = {};
         if (choiceColumn && data[choiceColumn]) { data.id.forEach(function (id, i) { HB.valById[id] = data[choiceColumn][i]; }); }
-        fillTypes(await loadTypes());
+        if (data.nb) { data.id.forEach(function (id, i) { HB.nbById[id] = data.nb[i]; }); }
+        var types = await loadTypes();
         var linkCol = typeLinkCol(meta);
-        var typeName = "";
-        HB.types.forEach(function (t) { if (String(t.id) === HB.typeSel) { typeName = t.name; } });
+        var cols = HABIT_COLS.filter(function (c) { return data[c]; });
+        var refs = await habitsRefs(meta, linkCol ? cols.concat([linkCol]) : cols);
+
+        // lignes de base : hors supprimées (Supprime = true) et, si demandé, uniquement les sélectionnées
+        var base = [];
+        data.id.forEach(function (id, i) {
+          if (data.Supprime && data.Supprime[i] === true) { return; }
+          if (HB.only && data.Select && isEmptyVal(data.Select[i], meta.Select && meta.Select.type)) { return; }
+          base.push(i);
+        });
+
+        // type(s) de chaque ligne + nombre de lignes par type
+        var counts = {}, nameToId = {}, typesOf = {};
+        (types || []).forEach(function (t) { nameToId[t.name] = String(t.id); counts[String(t.id)] = 0; });
+        base.forEach(function (i) {
+          var ids = [];
+          if (linkCol) {
+            var lv = data[linkCol][i];
+            if (/^Ref/.test(meta[linkCol].type)) {
+              ids = listItems(lv).filter(function (x) { return x !== null && x !== undefined && x !== 0; }).map(String);
+            } else if (nameToId[String(lv)] !== undefined) {
+              ids = [nameToId[String(lv)]];
+            }
+          }
+          typesOf[i] = ids;
+          ids.forEach(function (id) { if (counts[id] !== undefined) { counts[id]++; } });
+        });
+        if (types && HB.typeSel !== "" && counts[HB.typeSel] === undefined) { HB.typeSel = ""; }
+        renderTypes(types, counts, base.length);
+
         if (HB.only && !data.Select) {
           habitsMessage("Colonne « Select » introuvable dans " + HABITS_TABLE + ".");
         } else if (HB.typeSel !== "" && !linkCol) {
           habitsMessage("Aucune colonne de " + HABITS_TABLE + " n'est liée à la table Type.");
         } else {
-          var cols = HABIT_COLS.filter(function (c) { return data[c]; });
-          var refs = await habitsRefs(meta, cols);
           var rows = [];
-          data.id.forEach(function (id, i) {
-            if (HB.only && isEmptyVal(data.Select[i], meta.Select && meta.Select.type)) { return; }
-            if (HB.typeSel !== "") {
-              var lv = data[linkCol][i];
-              var ok = /^Ref/.test(meta[linkCol].type)
-                ? listItems(lv).map(String).indexOf(HB.typeSel) !== -1
-                : String(lv) === typeName;
-              if (!ok) { return; }
-            }
-            var r = { id: id, att: null, cells: [], note: data.Note ? data.Note[i] : null };
+          base.forEach(function (i) {
+            if (HB.typeSel !== "" && typesOf[i].indexOf(HB.typeSel) === -1) { return; }
+            var r = {
+              id: data.id[i], att: null, cells: [],
+              note: data.Note ? data.Note[i] : null,
+              nb: data.nb ? data.nb[i] : null,
+              type: linkCol ? cellText(linkCol, data[linkCol][i], meta, refs) : "",
+              style: data.Select ? rowStyle(i, data.Select[i], data, meta) : null
+            };
             cols.forEach(function (c) {
               if (c === "Photo") { r.att = firstAttachment(data.Photo[i]); r.cells.push(""); }
               else { r.cells.push(cellText(c, data[c][i], meta, refs)); }
@@ -1244,7 +1368,7 @@
             r.title = [r.cells[cols.indexOf("Marque")], r.cells[cols.indexOf("Description")]].filter(Boolean).join(" – ");
             rows.push(r);
           });
-          var sig = cols.join(",") + "#" + JSON.stringify(rows.map(function (r) { return [r.id, r.att, r.cells]; }));
+          var sig = cols.join(",") + "#" + JSON.stringify(rows.map(function (r) { return [r.id, r.att, r.cells, r.style, r.type]; }));
           if (sig !== HB.sig) {
             HB.sig = sig;
             var tok = await galleryToken();
@@ -1256,6 +1380,7 @@
             cols.forEach(function (c) {
               var th = document.createElement("th");
               th.textContent = (meta[c] && meta[c].label) || c;
+              if (MIN_COLS[c]) { th.className = "min"; }
               trh.appendChild(th);
             });
             var thead = document.createElement("thead");
@@ -1273,6 +1398,8 @@
               });
               cols.forEach(function (c, ci) {
                 var td = document.createElement("td");
+                var type = (meta[c] && meta[c].type) || "";
+                if (MIN_COLS[c]) { td.className = "min"; }
                 if (c === "Photo") {
                   td.className = "c";
                   if (r.att) {
@@ -1284,11 +1411,23 @@
                   }
                 } else if (c === "Note") {
                   noteEditor(td, r, meta.Note);
+                } else if (c === "nb") {
+                  var num = document.createElement("span");
+                  num.textContent = r.cells[ci];
+                  td.appendChild(num);
+                  var plus = document.createElement("button");
+                  plus.type = "button"; plus.className = "plus"; plus.textContent = "+";
+                  plus.title = "Marquer comme porté"; plus.setAttribute("aria-label", "Marquer comme porté");
+                  plus.addEventListener("click", function (ev) { ev.stopPropagation(); wearOnce(r, num); });
+                  td.appendChild(plus);
                 } else {
-                  var type = (meta[c] && meta[c].type) || "";
                   if (type === "Bool") { td.className = "c"; }
-                  else if (type === "Int" || type === "Numeric") { td.className = "n"; }
                   td.textContent = r.cells[ci];
+                }
+                if (r.style) {
+                  if (r.style.fillColor) { td.style.background = r.style.fillColor; }
+                  if (r.style.textColor) { td.style.color = r.style.textColor; }
+                  if (r.style.fontBold) { td.style.fontWeight = "700"; }
                 }
                 tr.appendChild(td);
               });
@@ -1338,8 +1477,10 @@
   function noteEditor(td, r, m) {
     m = m || { type: "Any", choices: [], colors: {} };
     function save(value, ctrl, previous) {
+      var fields = {};
+      fields[m.colId || "Note"] = value;
       ctrl.disabled = true;
-      grist.docApi.applyUserActions([["UpdateRecord", HABITS_TABLE, r.id, { Note: value }]])
+      grist.docApi.applyUserActions([["UpdateRecord", HABITS_TABLE, r.id, fields]])
         .then(function () { ctrl.disabled = false; scheduleHabits(); })
         .catch(function (err) {
           ctrl.disabled = false;
@@ -1391,8 +1532,46 @@
     }
   }
 
-  /* Liste déroulante « Type » : valeurs de Type.Vetement, par ordre alphabétique.
-     Filtre les lignes de Mes_habits sur la colonne liée à la table Type. */
+  // Fenêtre de confirmation Oui / Non
+  function askWorn(msg) {
+    return new Promise(function (resolve) {
+      var ov = document.getElementById("wornOverlay");
+      document.getElementById("wornMsg").textContent = msg;
+      function done(r) {
+        ov.classList.remove("on");
+        document.removeEventListener("keydown", onKey, true);
+        resolve(r);
+      }
+      function onKey(ev) { if (ev.key === "Escape") { ev.stopImmediatePropagation(); done(false); } }
+      document.addEventListener("keydown", onKey, true);
+      document.getElementById("wornYes").onclick = function () { done(true); };
+      document.getElementById("wornNo").onclick = function () { done(false); };
+      ov.classList.add("on");
+      document.getElementById("wornYes").focus();
+    });
+  }
+
+  // Bouton « + » de la colonne nb : après confirmation, ajoute 1 au nombre
+  async function wearOnce(r, numEl) {
+    var msg = ("Confirmer que cet habit " + r.type + " a été porté ?").replace(/\s+/g, " ");
+    var ok = await askWorn(msg);
+    if (!ok) { return; }
+    var cur = Number(HB.nbById[r.id]);
+    if (!isFinite(cur)) { cur = 0; }
+    var fields = {};
+    fields[(HB.meta && HB.meta.nb && HB.meta.nb.colId) || "nb"] = cur + 1;
+    try {
+      await grist.docApi.applyUserActions([["UpdateRecord", HABITS_TABLE, r.id, fields]]);
+      HB.nbById[r.id] = cur + 1;
+      numEl.textContent = String(cur + 1);
+      scheduleHabits();
+    } catch (err) {
+      alert("Modification impossible : " + (err && err.message ? err.message : err));
+    }
+  }
+
+  /* Cadre « Types » à gauche du tableau : valeurs de Type.Vetement (ordre alphabétique)
+     avec le nombre de lignes de chaque type. Un clic filtre le tableau. */
   async function loadTypes() {
     try {
       var t = await grist.docApi.fetchTable("Type");
@@ -1407,31 +1586,56 @@
     } catch (e) { return null; }
   }
 
-  function fillTypes(list) {
-    var sig = list ? JSON.stringify(list) : "none";
+  function renderTypes(types, counts, total) {
+    var box = document.getElementById("hbTypes");
+    var sig = JSON.stringify([types, counts, total, HB.typeSel]);
     if (sig === HB.typeSig) { return; }
     HB.typeSig = sig;
-    HB.types = list || [];
-    var sel = document.getElementById("hbType");
-    sel.innerHTML = "";
-    var all = document.createElement("option");
-    all.value = ""; all.textContent = "Tous les types";
-    sel.appendChild(all);
-    HB.types.forEach(function (t) {
-      var o = document.createElement("option");
-      o.value = String(t.id); o.textContent = t.name;
-      sel.appendChild(o);
-    });
-    if (!HB.types.some(function (t) { return String(t.id) === HB.typeSel; })) { HB.typeSel = ""; }
-    sel.value = HB.typeSel;
-    sel.disabled = !list;
-    sel.title = list ? "Filtrer par type de vêtement (table Type)" : "Table « Type » ou colonne « Vetement » introuvable";
+    var top = box.scrollTop;
+    box.innerHTML = "";
+    if (!types) {
+      var h = document.createElement("div");
+      h.className = "hint"; h.textContent = "Table « Type » (colonne Vetement) introuvable.";
+      box.appendChild(h);
+      return;
+    }
+    function item(id, label, n) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "tp" + (id === HB.typeSel ? " on" : "") + (n === 0 ? " zero" : "");
+      var l = document.createElement("span"); l.className = "tp-l"; l.textContent = label;
+      var c = document.createElement("span"); c.className = "tp-n"; c.textContent = String(n);
+      b.appendChild(l); b.appendChild(c);
+      b.addEventListener("click", function () {
+        HB.typeSel = id;
+        HB.sig = null;
+        refreshHabits();
+      });
+      box.appendChild(b);
+    }
+    item("", "Toutes", total);
+    types.forEach(function (t) { item(String(t.id), t.name, counts[String(t.id)] || 0); });
+    box.scrollTop = top;
   }
 
   // Colonne de Mes_habits liée à la table Type (Ref:Type), à défaut « Vetement » ou « Type »
   function typeLinkCol(meta) {
     for (var k in meta) { if (/^Ref(List)?:Type$/.test(meta[k].type)) { return k; } }
     return meta.Vetement ? "Vetement" : (meta.Type ? "Type" : null);
+  }
+
+  // Retire la ligne de la sélection : vide la valeur de la colonne à choix (Select)
+  async function removeFromSelection(id) {
+    try {
+      await grist.selectedTable.update({ id: id, fields: fieldsWith(choiceColumn, null) });
+    } catch (e) {
+      alert("Impossible de retirer de la sélection : " + (e && e.message ? e.message : e));
+      throw e;
+    }
+    HB.valById[id] = null;
+    syncSelection();
+    scheduleGallery();
+    scheduleHabits();
   }
 
   function scheduleHabits() {
@@ -1441,16 +1645,12 @@
 
   try { HB.only = localStorage.getItem("selectionPhoto.only") === "1"; } catch (e) { /* valeur par défaut */ }
   document.getElementById("hbSel").checked = HB.only;
-  document.getElementById("hbType").addEventListener("change", function (ev) {
-    HB.typeSel = ev.target.value;
-    HB.sig = null;
-    scheduleHabits();
-  });
   document.getElementById("hbSel").addEventListener("change", function (ev) {
     HB.only = ev.target.checked;
+    if (HB.only) { HB.typeSel = ""; }   // « Sélectionnés » : retour automatique à « Toutes »
     try { localStorage.setItem("selectionPhoto.only", HB.only ? "1" : "0"); } catch (e) { /* non mémorisé */ }
     HB.sig = null;
-    scheduleHabits();
+    refreshHabits();
   });
 
   /* -----------------------------------------------------------
