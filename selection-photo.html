@@ -128,6 +128,7 @@
   .tp .tp-n { flex: none; font-size: 12px; font-weight: 400; color: var(--muted); font-variant-numeric: tabular-nums; }
   .tp.on .tp-n { color: #2b86c5; font-weight: 600; }
   .tp.zero { opacity: .5; }
+  .tp-cap { padding: 2px 12px 4px; font-size: 10.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
   .hb-body { flex: 1; min-width: 0; min-height: 0; overflow: auto; }
   table.hb th.min, table.hb td.min { width: 1%; white-space: nowrap; text-align: center; }
   button.plus { width: 16px; height: 16px; margin-left: 6px; padding: 0; vertical-align: middle; font-size: 12px; line-height: 1; color: var(--text); background: var(--bg); border: 1px solid var(--edge); border-radius: 50%; cursor: pointer; }
@@ -334,10 +335,16 @@
       <input type="checkbox" id="hbSel">
       <span class="track"></span>
     </label>
+    <label class="sw hb-right violet" title="Afficher uniquement les habits à ranger (colonne A_ranger = vrai)">
+      <span>A ranger</span>
+      <input type="checkbox" id="hbRanger">
+      <span class="track"></span>
+    </label>
     <button id="hbMax" class="g-btn" type="button" title="Agrandir ce cadre (réduit l'autre à sa barre de titre)">Agrandir</button>
   </div>
   <div class="hb-main">
     <aside id="hbTypes" class="hb-types" aria-label="Types de vêtements"></aside>
+    <aside id="hbEmps" class="hb-types" aria-label="Emplacements"></aside>
     <div id="hbBody" class="hb-body"></div>
   </div>
 </section>
@@ -1267,7 +1274,7 @@
   var MIN_COLS = { nb: 1, Note: 1, A_ranger: 1 };
   var CANON = HABIT_COLS.concat(["Select", "Supprime", "Type"]);
   var HB = { busy: false, again: false, sig: null, timer: null, only: false, meta: null, selRules: [],
-            selectedId: null, cursorId: null, valById: {}, nbById: {}, typeSel: "", typeSig: null };
+            selectedId: null, cursorId: null, valById: {}, nbById: {}, typeSel: "", typeSig: null, empSel: "", empSig: null, rangerOnly: false };
 
   // Comparaison de noms de colonnes sans tenir compte de la casse ni des accents
   function norm(x) { return String(x).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase(); }
@@ -1416,8 +1423,10 @@
         HB.valById = {}; HB.nbById = {};
         if (choiceColumn && data[choiceColumn]) { data.id.forEach(function (id, i) { HB.valById[id] = data[choiceColumn][i]; }); }
         if (data.nb) { data.id.forEach(function (id, i) { HB.nbById[id] = data.nb[i]; }); }
-        var types = await loadTypes();
+        var types = await loadRefList("Type", "Vetement");
+        var emps = await loadRefList("Emplacements", "Emplacement");
         var linkCol = typeLinkCol(meta);
+        var empCol = empLinkCol(meta);
         var cols = HABIT_COLS.filter(function (c) { return data[c]; });
         var refs = await habitsRefs(meta, linkCol ? cols.concat([linkCol]) : cols);
 
@@ -1426,36 +1435,41 @@
         data.id.forEach(function (id, i) {
           if (data.Supprime && data.Supprime[i] === true) { return; }
           if (HB.only && data.Select && isEmptyVal(data.Select[i], meta.Select && meta.Select.type)) { return; }
+          if (HB.rangerOnly && data.A_ranger && data.A_ranger[i] !== true) { return; }
           base.push(i);
         });
 
-        // type(s) de chaque ligne + nombre de lignes par type
-        var counts = {}, nameToId = {}, typesOf = {};
-        (types || []).forEach(function (t) { nameToId[t.name] = String(t.id); counts[String(t.id)] = 0; });
+        // type(s) et emplacement(s) de chaque ligne ; nombre de lignes par valeur
+        // (les comptes d'une liste tiennent compte de la sélection de l'autre liste)
+        var tIds = {}, eIds = {}, nameToT = {}, nameToE = {}, tCounts = {}, eCounts = {}, tTotal = 0, eTotal = 0;
+        (types || []).forEach(function (t) { nameToT[t.name] = String(t.id); tCounts[String(t.id)] = 0; });
+        (emps || []).forEach(function (e) { nameToE[e.name] = String(e.id); eCounts[String(e.id)] = 0; });
+        if (types && HB.typeSel !== "" && tCounts[HB.typeSel] === undefined) { HB.typeSel = ""; }
+        if (emps && HB.empSel !== "" && eCounts[HB.empSel] === undefined) { HB.empSel = ""; }
         base.forEach(function (i) {
-          var ids = [];
-          if (linkCol) {
-            var lv = data[linkCol][i];
-            if (/^Ref/.test(meta[linkCol].type)) {
-              ids = listItems(lv).filter(function (x) { return x !== null && x !== undefined && x !== 0; }).map(String);
-            } else if (nameToId[String(lv)] !== undefined) {
-              ids = [nameToId[String(lv)]];
-            }
-          }
-          typesOf[i] = ids;
-          ids.forEach(function (id) { if (counts[id] !== undefined) { counts[id]++; } });
+          tIds[i] = linkIds(data, meta, linkCol, nameToT, i);
+          eIds[i] = linkIds(data, meta, empCol, nameToE, i);
+          var okT = HB.typeSel === "" || tIds[i].indexOf(HB.typeSel) !== -1;
+          var okE = HB.empSel === "" || eIds[i].indexOf(HB.empSel) !== -1;
+          if (okE) { tTotal++; tIds[i].forEach(function (id) { if (tCounts[id] !== undefined) { tCounts[id]++; } }); }
+          if (okT) { eTotal++; eIds[i].forEach(function (id) { if (eCounts[id] !== undefined) { eCounts[id]++; } }); }
         });
-        if (types && HB.typeSel !== "" && counts[HB.typeSel] === undefined) { HB.typeSel = ""; }
-        renderTypes(types, counts, base.length);
+        renderList("hbTypes", "Types", types, tCounts, tTotal, "typeSel", "typeSig", "Table « Type » (colonne Vetement) introuvable.");
+        renderList("hbEmps", "Emplacements", emps, eCounts, eTotal, "empSel", "empSig", "Table « Emplacements » (colonne Emplacement) introuvable.");
 
         if (HB.only && !data.Select) {
           habitsMessage("Colonne « Select » introuvable dans " + HABITS_TABLE + ".");
+        } else if (HB.rangerOnly && !data.A_ranger) {
+          habitsMessage("Colonne « A_ranger » introuvable dans " + HABITS_TABLE + ".");
         } else if (HB.typeSel !== "" && !linkCol) {
           habitsMessage("Aucune colonne de " + HABITS_TABLE + " n'est liée à la table Type.");
+        } else if (HB.empSel !== "" && !empCol) {
+          habitsMessage("Aucune colonne de " + HABITS_TABLE + " n'est liée à la table Emplacements.");
         } else {
           var rows = [];
           base.forEach(function (i) {
-            if (HB.typeSel !== "" && typesOf[i].indexOf(HB.typeSel) === -1) { return; }
+            if (HB.typeSel !== "" && tIds[i].indexOf(HB.typeSel) === -1) { return; }
+            if (HB.empSel !== "" && eIds[i].indexOf(HB.empSel) === -1) { return; }
             var r = {
               id: data.id[i], att: null, cells: [],
               note: data.Note ? data.Note[i] : null,
@@ -1692,15 +1706,16 @@
     }
   }
 
-  /* Cadre « Types » à gauche du tableau : valeurs de Type.Vetement (ordre alphabétique)
-     avec le nombre de lignes de chaque type. Un clic filtre le tableau. */
-  async function loadTypes() {
+  /* Cadres « Types » et « Emplacements » à gauche du tableau : valeurs d'une colonne d'une table
+     de référence (ordre alphabétique) avec le nombre de lignes de chacune. Un clic filtre le tableau. */
+  async function loadRefList(table, column) {
     try {
-      var t = await grist.docApi.fetchTable("Type");
-      if (!t.Vetement) { return null; }
+      var t = await grist.docApi.fetchTable(table);
+      var key = findKey(t, column);
+      if (!key) { return null; }
       var list = [];
       t.id.forEach(function (id, i) {
-        var n = (t.Vetement[i] === null || t.Vetement[i] === undefined) ? "" : String(t.Vetement[i]).trim();
+        var n = (t[key][i] === null || t[key][i] === undefined) ? "" : String(t[key][i]).trim();
         if (n !== "") { list.push({ id: id, name: n }); }
       });
       list.sort(function (a, b) { return a.name.localeCompare(b.name, "fr", { sensitivity: "base" }); });
@@ -1708,36 +1723,55 @@
     } catch (e) { return null; }
   }
 
-  function renderTypes(types, counts, total) {
-    var box = document.getElementById("hbTypes");
-    var sig = JSON.stringify([types, counts, total, HB.typeSel]);
-    if (sig === HB.typeSig) { return; }
-    HB.typeSig = sig;
+  // Identifiants (en texte) des valeurs d'une ligne pour une colonne liée à une table de référence
+  function linkIds(data, meta, col, nameToId, i) {
+    if (!col || !data[col]) { return []; }
+    var lv = data[col][i];
+    if (/^Ref/.test(meta[col].type)) {
+      return listItems(lv).filter(function (x) { return x !== null && x !== undefined && x !== 0; }).map(String);
+    }
+    return nameToId[String(lv)] !== undefined ? [nameToId[String(lv)]] : [];
+  }
+
+  function renderList(boxId, caption, items, counts, total, selKey, sigKey, missingMsg) {
+    var box = document.getElementById(boxId);
+    var sig = JSON.stringify([items, counts, total, HB[selKey]]);
+    if (sig === HB[sigKey]) { return; }
+    HB[sigKey] = sig;
     var top = box.scrollTop;
     box.innerHTML = "";
-    if (!types) {
+    var cap = document.createElement("div");
+    cap.className = "tp-cap"; cap.textContent = caption;
+    box.appendChild(cap);
+    if (!items) {
       var h = document.createElement("div");
-      h.className = "hint"; h.textContent = "Table « Type » (colonne Vetement) introuvable.";
+      h.className = "hint"; h.textContent = missingMsg;
       box.appendChild(h);
       return;
     }
     function item(id, label, n) {
       var b = document.createElement("button");
       b.type = "button";
-      b.className = "tp" + (id === HB.typeSel ? " on" : "") + (n === 0 ? " zero" : "");
+      b.className = "tp" + (id === HB[selKey] ? " on" : "") + (n === 0 ? " zero" : "");
       var l = document.createElement("span"); l.className = "tp-l"; l.textContent = label;
       var c = document.createElement("span"); c.className = "tp-n"; c.textContent = String(n);
       b.appendChild(l); b.appendChild(c);
       b.addEventListener("click", function () {
-        HB.typeSel = id;
+        HB[selKey] = id;
         HB.sig = null;
         refreshHabits();
       });
       box.appendChild(b);
     }
     item("", "Toutes", total);
-    types.forEach(function (t) { item(String(t.id), t.name, counts[String(t.id)] || 0); });
+    items.forEach(function (t) { item(String(t.id), t.name, counts[String(t.id)] || 0); });
     box.scrollTop = top;
+  }
+
+  // Colonne de Mes_habits liée à la table Emplacements (Ref:Emplacements), à défaut « Emplacement »
+  function empLinkCol(meta) {
+    for (var k in meta) { if (/^Ref(List)?:Emplacements$/.test(meta[k].type)) { return k; } }
+    return meta.Emplacement ? "Emplacement" : null;
   }
 
   // Colonne de Mes_habits liée à la table Type (Ref:Type), à défaut « Vetement » ou « Type »
@@ -2295,6 +2329,15 @@
     HB.only = ev.target.checked;
     if (HB.only) { HB.typeSel = ""; }   // « Sélectionnés » : retour automatique à « Toutes »
     try { localStorage.setItem("selectionPhoto.only", HB.only ? "1" : "0"); } catch (e) { /* non mémorisé */ }
+    HB.sig = null;
+    refreshHabits();
+  });
+
+  try { HB.rangerOnly = localStorage.getItem("selectionPhoto.ranger") === "1"; } catch (e) { /* valeur par défaut */ }
+  document.getElementById("hbRanger").checked = HB.rangerOnly;
+  document.getElementById("hbRanger").addEventListener("change", function (ev) {
+    HB.rangerOnly = ev.target.checked;
+    try { localStorage.setItem("selectionPhoto.ranger", HB.rangerOnly ? "1" : "0"); } catch (e) { /* non mémorisé */ }
     HB.sig = null;
     refreshHabits();
   });
