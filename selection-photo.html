@@ -99,7 +99,18 @@
   .sw input:focus-visible + .track { outline: 2px solid var(--slider); outline-offset: 2px; }
   .hb-head { display: flex; align-items: center; gap: 10px; }
   .hb-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
-  .hb-right { margin-left: auto; }
+  .g-head input.hb-size[type=range] { margin-left: auto; width: 110px; }
+  .g-btn { flex: none; padding: 2px 10px; font: inherit; font-size: 12px; color: var(--text); background: var(--bg); border: 1px solid var(--edge); border-radius: 8px; cursor: pointer; }
+  .g-btn:hover { background: var(--border); }
+  .panel.gallery.collapsed, .panel.habits.collapsed { flex: none; min-height: 0; }
+  .panel.gallery.collapsed .g-body, .panel.habits.collapsed .hb-main { display: none; }
+  .panel.gallery.collapsed .g-head, .panel.habits.collapsed .g-head { border-bottom: 0; cursor: pointer; }
+  .sw.sm { display: inline-flex; vertical-align: middle; }
+  .sw.sm .track { width: 30px; height: 16px; }
+  .sw.sm .track::after { width: 12px; height: 12px; }
+  .sw.sm input:checked + .track::after { transform: translateX(14px); }
+  .sw.violet input:checked + .track { background: #8b5cf6; }
+  .sw.violet input:focus-visible + .track { outline-color: #8b5cf6; }
   select.hb-note, input.hb-note {
     font: inherit; font-size: 12px; color: var(--text); background: var(--bg); color-scheme: light dark;
     border: 1px solid var(--edge); border-radius: 8px; padding: 3px 8px; max-width: 100%;
@@ -125,15 +136,15 @@
   .lb .lb-rm:hover { background: #bf3535; }
   .lb .lb-rm:disabled { opacity: .6; cursor: default; }
   table.hb tbody tr { cursor: pointer; }
-  table.hb tbody tr.sel td { box-shadow: inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent); }
+  table.hb tbody tr.sel td { background-image: linear-gradient(rgba(22, 179, 120, .22), rgba(22, 179, 120, .22)); box-shadow: inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent); }
   table.hb tbody tr.sel td:first-child { box-shadow: inset 3px 0 0 var(--accent), inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent); }
   table.hb { border-collapse: collapse; width: 100%; font-size: 12px; }
   table.hb th { position: sticky; top: 0; z-index: 1; padding: 6px 10px; text-align: left; white-space: nowrap; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: var(--panel-a); border-bottom: 1px solid var(--border); }
   table.hb td { padding: 4px 10px; vertical-align: middle; border-bottom: 1px solid var(--border); }
-  table.hb tbody tr:hover td { background: var(--surface); }
+  table.hb tbody tr:hover td { background-color: var(--surface); }
   table.hb td.c { text-align: center; }
   table.hb td.n { text-align: right; font-variant-numeric: tabular-nums; }
-  table.hb img.hb-th { display: block; width: 56px; height: auto; min-height: 20px; border-radius: 6px; background: var(--border); cursor: zoom-in; }
+  table.hb img.hb-th { display: block; margin: 0 auto; height: var(--hbh, 56px); width: auto; min-width: 20px; max-width: none; border-radius: 6px; background: var(--border); cursor: zoom-in; }
   .hb-body .hint { padding: 12px; }
   .panel.choices { flex: 1; min-width: 0; background: var(--panel-a); overflow-y: auto; display: flex; flex-direction: column; }
   .panel.choices .bar { flex: 1 0 auto; align-content: flex-start; }
@@ -266,6 +277,7 @@
     <span class="g-title">Photos</span>
     <span id="gCount" class="g-count"></span>
     <input id="gSize" type="range" min="60" max="360" value="140" aria-label="Taille des photos">
+    <button id="gMax" class="g-btn" type="button" title="Agrandir ce cadre (réduit l'autre à sa barre de titre)">Agrandir</button>
   </div>
   <div id="gBody" class="g-body"></div>
 </section>
@@ -275,11 +287,13 @@
       <span class="g-title">Liste des habits</span>
       <span id="hbCount" class="g-count"></span>
     </div>
+    <input id="hbSize" class="hb-size" type="range" min="30" max="200" value="56" aria-label="Taille des photos du tableau" title="Taille des photos du tableau">
     <label class="sw hb-right" title="Afficher uniquement les lignes dont la colonne Select n'est pas vide">
       <span>Sélectionnés</span>
       <input type="checkbox" id="hbSel">
       <span class="track"></span>
     </label>
+    <button id="hbMax" class="g-btn" type="button" title="Agrandir ce cadre (réduit l'autre à sa barre de titre)">Agrandir</button>
   </div>
   <div class="hb-main">
     <aside id="hbTypes" class="hb-types" aria-label="Types de vêtements"></aside>
@@ -1420,12 +1434,32 @@
                   plus.title = "Marquer comme porté"; plus.setAttribute("aria-label", "Marquer comme porté");
                   plus.addEventListener("click", function (ev) { ev.stopPropagation(); wearOnce(r, num); });
                   td.appendChild(plus);
+                } else if (c === "A_ranger" && type === "Bool") {
+                  var lab = document.createElement("label");
+                  lab.className = "sw sm violet"; lab.title = "À ranger";
+                  var cb = document.createElement("input");
+                  cb.type = "checkbox"; cb.checked = r.cells[ci] !== "";
+                  var trk = document.createElement("span"); trk.className = "track";
+                  lab.appendChild(cb); lab.appendChild(trk);
+                  lab.addEventListener("click", function (ev) { ev.stopPropagation(); });
+                  cb.addEventListener("change", function () {
+                    var want = cb.checked, f = {};
+                    f[meta.A_ranger.colId] = want;
+                    cb.disabled = true;
+                    grist.docApi.applyUserActions([["UpdateRecord", HABITS_TABLE, r.id, f]])
+                      .then(function () { cb.disabled = false; scheduleHabits(); })
+                      .catch(function (err) {
+                        cb.disabled = false; cb.checked = !want;
+                        alert("Modification impossible : " + (err && err.message ? err.message : err));
+                      });
+                  });
+                  td.appendChild(lab);
                 } else {
                   if (type === "Bool") { td.className = "c"; }
                   td.textContent = r.cells[ci];
                 }
                 if (r.style) {
-                  if (r.style.fillColor) { td.style.background = r.style.fillColor; }
+                  if (r.style.fillColor) { td.style.backgroundColor = r.style.fillColor; }
                   if (r.style.textColor) { td.style.color = r.style.textColor; }
                   if (r.style.fontBold) { td.style.fontWeight = "700"; }
                 }
@@ -1642,6 +1676,41 @@
     clearTimeout(HB.timer);
     HB.timer = setTimeout(refreshHabits, 200);
   }
+
+  function applyTableThumb(v) { document.getElementById("hbBody").style.setProperty("--hbh", v + "px"); }
+  try {
+    var savedH = parseInt(localStorage.getItem("selectionPhoto.hbh"), 10);
+    if (savedH >= 30 && savedH <= 200) { document.getElementById("hbSize").value = String(savedH); }
+  } catch (e) { /* valeur par défaut */ }
+  applyTableThumb(document.getElementById("hbSize").value);
+  document.getElementById("hbSize").addEventListener("input", function (ev) {
+    applyTableThumb(ev.target.value);
+    try { localStorage.setItem("selectionPhoto.hbh", ev.target.value); } catch (e) { /* non mémorisé */ }
+  });
+
+  /* Agrandir un cadre : l'autre est réduit à sa barre de titre ; un clic sur cette barre
+     (ou le même bouton) ramène la configuration d'origine. */
+  var LAYOUT = null;
+  function applyLayout() {
+    document.getElementById("gallery").classList.toggle("collapsed", LAYOUT === "habits");
+    document.getElementById("habits").classList.toggle("collapsed", LAYOUT === "gallery");
+    document.getElementById("gMax").textContent = LAYOUT === "gallery" ? "Réduire" : "Agrandir";
+    document.getElementById("hbMax").textContent = LAYOUT === "habits" ? "Réduire" : "Agrandir";
+  }
+  [["gallery", "gMax"], ["habits", "hbMax"]].forEach(function (pair) {
+    var panel = document.getElementById(pair[0]);
+    document.getElementById(pair[1]).addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      LAYOUT = (LAYOUT === pair[0]) ? null : pair[0];
+      applyLayout();
+    });
+    panel.querySelector(".g-head").addEventListener("click", function (ev) {
+      if (panel.classList.contains("collapsed") && !ev.target.closest("input, label, button, select")) {
+        LAYOUT = null;
+        applyLayout();
+      }
+    });
+  });
 
   try { HB.only = localStorage.getItem("selectionPhoto.only") === "1"; } catch (e) { /* valeur par défaut */ }
   document.getElementById("hbSel").checked = HB.only;
