@@ -157,13 +157,46 @@
   .act:hover:not(:disabled) { filter: brightness(1.1); }
   .act:active:not(:disabled) { transform: translateY(1px); }
   .act:disabled { opacity: .5; cursor: default; }
-  .act.save { background: var(--save); }
-  .act.hist { background: var(--hist); color: #14284b; }
+  .act.add { background: var(--accent); padding: 8px 22px; }
+  .g-btn.save { color: #fff; background: var(--save); border-color: transparent; }
+  .g-btn.hist { color: #14284b; background: var(--hist); border-color: transparent; }
+  .g-btn.save:hover:not(:disabled), .g-btn.hist:hover:not(:disabled) { filter: brightness(1.1); }
+  .g-btn.save:hover:not(:disabled) { background: var(--save); }
+  .g-btn.hist:hover:not(:disabled) { background: var(--hist); }
+  .g-btn:disabled { opacity: .5; cursor: default; }
+  .panel.gallery .g-head { flex-wrap: wrap; row-gap: 4px; }
+
+  /* ---- Formulaire « Ajouter un habit » ---- */
+  .add-dlg { width: min(820px, 100%); height: auto; max-height: 100%; }
+  .add-body { flex: 1; min-height: 0; overflow: auto; display: grid; grid-template-columns: 1fr minmax(190px, 250px); gap: 16px; padding: 14px 18px; }
+  .af-grid { display: grid; grid-template-columns: 110px 1fr; gap: 8px 10px; align-content: start; align-items: center; min-width: 0; }
+  .af-grid > label { color: var(--muted); font-weight: 600; font-size: 13px; }
+  .af-grid > label.req::after { content: " *"; color: #d64545; }
+  .af-grid > label.tall { align-self: start; padding-top: 7px; }
+  .af-grid input[type=text], .af-grid input[type=number], .af-grid input[type=date], .af-grid input[type=datetime-local], .af-grid select, .af-grid textarea {
+    box-sizing: border-box; width: 100%; font: inherit; padding: 6px 10px; color: var(--text); background: var(--surface);
+    border: 1px solid var(--border); border-radius: 10px; color-scheme: light dark;
+  }
+  .af-grid textarea { resize: vertical; min-height: 56px; }
+  .af-grid .af-bad { border-color: #d64545 !important; box-shadow: 0 0 0 2px rgba(214, 69, 69, .25); }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+  .chip { display: flex; align-items: center; gap: 4px; font-size: 13px; cursor: pointer; }
+  .viewer { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .vw-stage { flex: 1; min-height: 190px; display: flex; align-items: center; justify-content: center; overflow: hidden; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+  .vw-stage img { display: block; max-width: 100%; max-height: 280px; object-fit: contain; cursor: zoom-in; }
+  .vw-nav { display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 12px; color: var(--muted); }
+  .vw-btns { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+  .add-err { color: #d64545; font-size: 13px; font-weight: 600; align-self: center; min-width: 0; }
+  .add-btns { display: flex; gap: 8px; margin-left: auto; }
+  @media (max-width: 560px) {
+    .add-body { grid-template-columns: 1fr; }
+    .af-grid { grid-template-columns: 90px 1fr; }
+  }
   .datebox { display: flex; flex-direction: column; gap: 3px; }
   .datebox label { font-size: 11px; font-weight: 600; color: var(--muted); padding-left: 6px; }
   #saveDate {
-    font: inherit; padding: 4px 12px; color: var(--text); background: var(--bg);
-    border: 1.5px solid var(--edge); border-radius: 999px; color-scheme: light dark;
+    flex: none; font: inherit; font-size: 12px; padding: 2px 8px; color: var(--text); background: var(--bg);
+    border: 1px solid var(--edge); border-radius: 8px; color-scheme: light dark;
   }
 
   /* ---- Fenêtre Historique ---- */
@@ -262,20 +295,16 @@
     </div>
   </section>
   <aside class="panel actions">
-    <div class="datebox">
-      <label for="saveDate">Date d'enregistrement</label>
-      <input id="saveDate" type="date">
-    </div>
-    <div class="btns">
-      <button id="save" class="act save" type="button" title="Enregistrer l'état actuel dans la table Historique">Enregistrer</button>
-      <button id="hist" class="act hist" type="button" title="Consulter et restaurer un enregistrement">Historique</button>
-    </div>
+    <button id="addBtn" class="act add" type="button" title="Ajouter un habit à la table Mes_habits">Ajouter</button>
   </aside>
 </div>
 <section id="gallery" class="panel gallery">
   <div class="g-head">
     <span class="g-title">Photos</span>
     <span id="gCount" class="g-count"></span>
+    <input id="saveDate" type="date" aria-label="Date d'enregistrement" title="Date d'enregistrement">
+    <button id="save" class="g-btn save" type="button" title="Enregistrer l'état actuel dans la table Historique">Enregistrer</button>
+    <button id="hist" class="g-btn hist" type="button" title="Consulter et restaurer un enregistrement">Historique</button>
     <input id="gSize" type="range" min="60" max="360" value="140" aria-label="Taille des photos">
     <button id="gMax" class="g-btn" type="button" title="Agrandir ce cadre (réduit l'autre à sa barre de titre)">Agrandir</button>
   </div>
@@ -309,6 +338,38 @@
       <button id="dupCancel" class="btn ghost" type="button">Annuler</button>
       <button id="dupAdd" class="btn ghost" type="button">Ajouter</button>
       <button id="dupReplace" class="btn primary" type="button">Remplacer</button>
+    </div>
+  </div>
+</div>
+
+<div id="addOverlay" class="overlay" role="dialog" aria-modal="true" aria-labelledby="addTitle">
+  <div class="dlg add-dlg">
+    <div class="dlg-head">
+      <h2 id="addTitle">Ajouter un habit</h2>
+      <button id="addX" class="xbtn" type="button" aria-label="Fermer">×</button>
+    </div>
+    <div class="add-body">
+      <div id="addGrid" class="af-grid"></div>
+      <div id="addViewer" class="viewer">
+        <div id="vwStage" class="vw-stage"></div>
+        <div class="vw-nav">
+          <button id="vwPrev" class="g-btn" type="button" aria-label="Photo précédente">‹</button>
+          <span id="vwCount"></span>
+          <button id="vwNext" class="g-btn" type="button" aria-label="Photo suivante">›</button>
+        </div>
+        <div class="vw-btns">
+          <button id="vwAdd" class="g-btn" type="button">Ajouter une photo</button>
+          <button id="vwDel" class="g-btn" type="button">Supprimer</button>
+        </div>
+        <input id="vwFile" type="file" accept="image/*" multiple hidden>
+      </div>
+    </div>
+    <div class="dlg-foot">
+      <span id="addErr" class="add-err" role="alert"></span>
+      <div class="add-btns">
+        <button id="addCancel" class="btn ghost" type="button">Annuler</button>
+        <button id="addSubmit" class="btn primary" type="button">Ajouter au dressing</button>
+      </div>
     </div>
   </div>
 </div>
@@ -1206,7 +1267,8 @@
         var wo = {};
         try { wo = JSON.parse(C.widgetOptions[j] || "{}"); } catch (e) { wo = {}; }
         meta[C.colId[j]] = {
-          colId: C.colId[j], type: C.type[j] || "Any", label: C.label[j] || C.colId[j], visible: nameById[C.visibleCol[j]] || null,
+          colId: C.colId[j], isFormula: !!(C.isFormula && C.isFormula[j]), pos: C.parentPos ? C.parentPos[j] : j,
+          type: C.type[j] || "Any", label: C.label[j] || C.colId[j], visible: nameById[C.visibleCol[j]] || null,
           choices: Array.isArray(wo.choices) ? wo.choices : [], colors: wo.choiceOptions || {}
         };
         if (norm(C.colId[j]) === "select") {
@@ -1676,6 +1738,279 @@
     clearTimeout(HB.timer);
     HB.timer = setTimeout(refreshHabits, 200);
   }
+
+  /* -----------------------------------------------------------
+     Bouton « Ajouter » : formulaire reprenant les colonnes de Mes_habits
+     (sauf Cat_taille, Supprime et Select). Type est obligatoire.
+     Les photos choisies sont téléversées au moment de l'ajout.
+     ----------------------------------------------------------- */
+  var ADD = { ctrls: [], files: [], cur: 0, busy: false, photoCol: null, typeCol: null, onKey: null };
+  var ADD_SKIP = { cat_taille: 1, supprime: 1, select: 1, id: 1, manualsort: 1 };
+
+  function addEl(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) { e.className = cls; }
+    if (text !== undefined) { e.textContent = text; }
+    return e;
+  }
+
+  async function refOptions(m) {
+    var out = [];
+    try {
+      var t = await grist.docApi.fetchTable(m.type.split(":")[1]);
+      t.id.forEach(function (id, n) {
+        var v = m.visible && t[m.visible] ? t[m.visible][n] : id;
+        var name = (v === null || v === undefined) ? "" : String(v);
+        if (name !== "") { out.push({ id: id, name: name }); }
+      });
+      out.sort(function (a, b) { return a.name.localeCompare(b.name, "fr", { sensitivity: "base" }); });
+    } catch (e) { /* liste vide */ }
+    return out;
+  }
+
+  function chipGroup(options) {
+    var box = addEl("div", "chips"), boxes = [];
+    options.forEach(function (o) {
+      var lab = addEl("label", "chip");
+      var cb = document.createElement("input");
+      cb.type = "checkbox"; cb.value = o.value;
+      lab.appendChild(cb);
+      lab.appendChild(document.createTextNode(o.label));
+      box.appendChild(lab);
+      boxes.push(cb);
+    });
+    return { el: box, vals: function () { return boxes.filter(function (b) { return b.checked; }).map(function (b) { return b.value; }); } };
+  }
+
+  function selectOf(options) {
+    var sel = document.createElement("select");
+    var none = document.createElement("option");
+    none.value = ""; none.textContent = "";
+    sel.appendChild(none);
+    options.forEach(function (o) {
+      var op = document.createElement("option");
+      op.value = o.value; op.textContent = o.label;
+      sel.appendChild(op);
+    });
+    return sel;
+  }
+
+  // Crée le champ de saisie d'une colonne : { el, get(), tall }  (get() renvoie undefined si vide)
+  async function makeControl(m) {
+    var t = m.type, inp;
+    if (t === "Bool") {
+      var lab = addEl("label", "sw sm"), cb = document.createElement("input");
+      cb.type = "checkbox";
+      lab.appendChild(cb); lab.appendChild(addEl("span", "track"));
+      return { el: lab, get: function () { return cb.checked ? true : undefined; } };
+    }
+    if (t === "Choice") {
+      var sc = selectOf(m.choices.map(function (c) { return { value: c, label: c }; }));
+      return { el: sc, get: function () { return sc.value !== "" ? sc.value : undefined; } };
+    }
+    if (t === "ChoiceList") {
+      var gc = chipGroup(m.choices.map(function (c) { return { value: c, label: c }; }));
+      return { el: gc.el, tall: true, get: function () { var v = gc.vals(); return v.length ? ["L"].concat(v) : undefined; } };
+    }
+    if (/^Ref:/.test(t)) {
+      var opts = await refOptions(m);
+      var sr = selectOf(opts.map(function (o) { return { value: String(o.id), label: o.name }; }));
+      return { el: sr, get: function () { return sr.value !== "" ? Number(sr.value) : undefined; } };
+    }
+    if (/^RefList:/.test(t)) {
+      var ro = await refOptions(m);
+      var gr = chipGroup(ro.map(function (o) { return { value: String(o.id), label: o.name }; }));
+      return { el: gr.el, tall: true, get: function () { var v = gr.vals(); return v.length ? ["L"].concat(v.map(Number)) : undefined; } };
+    }
+    if (t === "Int" || t === "Numeric") {
+      inp = document.createElement("input");
+      inp.type = "number"; inp.step = t === "Int" ? "1" : "any";
+      return { el: inp, get: function () { return inp.value !== "" && isFinite(Number(inp.value)) ? Number(inp.value) : undefined; } };
+    }
+    if (/^Date:?/.test(t) && t !== "DateTime" && !/^DateTime/.test(t)) {
+      inp = document.createElement("input");
+      inp.type = "date";
+      return { el: inp, get: function () {
+        var p = /^(\d{4})-(\d{2})-(\d{2})$/.exec(inp.value);
+        return p ? Date.UTC(+p[1], +p[2] - 1, +p[3]) / 1000 : undefined;
+      } };
+    }
+    if (/^DateTime/.test(t)) {
+      inp = document.createElement("input");
+      inp.type = "datetime-local";
+      return { el: inp, get: function () {
+        var ms = inp.value ? new Date(inp.value).getTime() : NaN;
+        return isFinite(ms) ? ms / 1000 : undefined;
+      } };
+    }
+    if (norm(m.colId) === "description") {
+      inp = document.createElement("textarea");
+      inp.rows = 2;
+      return { el: inp, tall: true, get: function () { return inp.value.trim() !== "" ? inp.value.trim() : undefined; } };
+    }
+    inp = document.createElement("input");
+    inp.type = "text";
+    return { el: inp, get: function () { return inp.value.trim() !== "" ? inp.value.trim() : undefined; } };
+  }
+
+  function renderViewer() {
+    var st = document.getElementById("vwStage");
+    st.innerHTML = "";
+    var n = ADD.files.length;
+    if (!n) {
+      st.appendChild(addEl("span", "hint", "Aucune photo"));
+    } else {
+      ADD.cur = Math.max(0, Math.min(ADD.cur, n - 1));
+      var f = ADD.files[ADD.cur];
+      var img = document.createElement("img");
+      img.src = f.url; img.alt = f.file.name;
+      img.addEventListener("click", function () { openLightbox(f.url, f.file.name, null); });
+      st.appendChild(img);
+    }
+    document.getElementById("vwCount").textContent = n ? (ADD.cur + 1) + " / " + n : "";
+    document.getElementById("vwPrev").disabled = n < 2;
+    document.getElementById("vwNext").disabled = n < 2;
+    document.getElementById("vwDel").disabled = !n;
+  }
+
+  async function buildAddForm(meta) {
+    var seen = {}, list = [];
+    for (var k in meta) {
+      var m = meta[k];
+      if (seen[m.colId]) { continue; }
+      seen[m.colId] = 1;
+      list.push(m);
+    }
+    list.sort(function (a, b) { return a.pos - b.pos; });
+    var usable = list.filter(function (m) {
+      return !m.isFormula && m.type !== "ManualSortPos" && !/^gristHelper_/.test(m.colId) && !ADD_SKIP[norm(m.colId)];
+    });
+    var photo = usable.filter(function (m) { return m.type === "Attachments" && norm(m.colId) === "photo"; })[0]
+             || usable.filter(function (m) { return m.type === "Attachments"; })[0] || null;
+    ADD.photoCol = photo ? photo.colId : null;
+    var fields = usable.filter(function (m) { return m.type !== "Attachments"; });
+    var typeM = fields.filter(function (m) { return norm(m.colId) === "type"; })[0];
+    if (!typeM) {
+      var lk = typeLinkCol(meta);
+      typeM = lk ? meta[lk] : null;
+      if (typeM && fields.indexOf(typeM) === -1) { typeM = null; }
+    }
+    ADD.typeCol = typeM ? typeM.colId : null;
+
+    var grid = document.getElementById("addGrid");
+    grid.innerHTML = "";
+    ADD.ctrls = [];
+    for (var i = 0; i < fields.length; i++) {
+      var fm = fields[i];
+      var c = await makeControl(fm);
+      var lab = addEl("label", "", fm.label || fm.colId);
+      if (c.tall) { lab.className = "tall"; }
+      if (fm.colId === ADD.typeCol) { lab.className += " req"; }
+      grid.appendChild(lab);
+      grid.appendChild(c.el);
+      ADD.ctrls.push({ m: fm, c: c });
+    }
+    ADD.files.forEach(function (f) { URL.revokeObjectURL(f.url); });
+    ADD.files = []; ADD.cur = 0;
+    document.getElementById("addViewer").style.display = ADD.photoCol ? "" : "none";
+    document.getElementById("addErr").textContent = "";
+    renderViewer();
+  }
+
+  function closeAdd() {
+    document.getElementById("addOverlay").classList.remove("on");
+    ADD.files.forEach(function (f) { URL.revokeObjectURL(f.url); });
+    ADD.files = [];
+    if (ADD.onKey) { document.removeEventListener("keydown", ADD.onKey); ADD.onKey = null; }
+  }
+
+  async function openAdd() {
+    var btn = document.getElementById("addBtn");
+    btn.disabled = true;
+    try {
+      var meta = await habitsMeta();
+      if (!meta) { alert("Table « " + HABITS_TABLE + " » introuvable."); return; }
+      await buildAddForm(meta);
+      document.getElementById("addOverlay").classList.add("on");
+      ADD.onKey = function (ev) { if (ev.key === "Escape" && !ADD.busy) { closeAdd(); } };
+      document.addEventListener("keydown", ADD.onKey);
+      var first = document.querySelector("#addGrid input, #addGrid select, #addGrid textarea");
+      if (first) { first.focus(); }
+    } catch (e) {
+      alert("Impossible d'ouvrir le formulaire : " + (e && e.message ? e.message : e));
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  async function submitAdd() {
+    if (ADD.busy) { return; }
+    var err = document.getElementById("addErr");
+    err.textContent = "";
+    var fields = {};
+    ADD.ctrls.forEach(function (x) {
+      x.c.el.classList.remove("af-bad");
+      var v = x.c.get();
+      if (v !== undefined) { fields[x.m.colId] = v; }
+    });
+    if (ADD.typeCol && fields[ADD.typeCol] === undefined) {
+      ADD.ctrls.forEach(function (x) {
+        if (x.m.colId === ADD.typeCol) { x.c.el.classList.add("af-bad"); var f = x.c.el.querySelector ? (x.c.el.matches("input,select,textarea") ? x.c.el : x.c.el.querySelector("input,select,textarea")) : null; if (f) { f.focus(); } }
+      });
+      err.textContent = "Le champ Type est obligatoire.";
+      return;
+    }
+    var submit = document.getElementById("addSubmit");
+    ADD.busy = true; submit.disabled = true; submit.textContent = "Ajout…";
+    try {
+      if (ADD.files.length && ADD.photoCol) {
+        var tok = await grist.docApi.getAccessToken({ readOnly: false });
+        var fd = new FormData();
+        ADD.files.forEach(function (f) { fd.append("upload", f.file, f.file.name); });
+        var resp = await fetch(tok.baseUrl + "/attachments?auth=" + encodeURIComponent(tok.token), { method: "POST", body: fd });
+        if (!resp.ok) { throw new Error("téléversement des photos impossible (code " + resp.status + ")"); }
+        var ids = await resp.json();
+        fields[ADD.photoCol] = ["L"].concat(ids);
+      }
+      var res = await grist.docApi.applyUserActions([["AddRecord", HABITS_TABLE, null, fields]]);
+      var nid = res && res.retValues ? res.retValues[0] : null;
+      if (typeof nid === "number") { HB.selectedId = nid; }
+      closeAdd();
+      syncSelection();
+      HB.sig = null;
+      scheduleHabits();
+      scheduleGallery();
+    } catch (e) {
+      err.textContent = "Échec de l'ajout : " + (e && e.message ? e.message : e);
+    }
+    ADD.busy = false; submit.disabled = false; submit.textContent = "Ajouter au dressing";
+  }
+
+  document.getElementById("addBtn").addEventListener("click", openAdd);
+  document.getElementById("addX").addEventListener("click", closeAdd);
+  document.getElementById("addCancel").addEventListener("click", closeAdd);
+  document.getElementById("addSubmit").addEventListener("click", submitAdd);
+  document.getElementById("vwAdd").addEventListener("click", function () { document.getElementById("vwFile").click(); });
+  document.getElementById("vwFile").addEventListener("change", function (ev) {
+    Array.prototype.forEach.call(ev.target.files, function (file) {
+      if (/^image\//.test(file.type)) { ADD.files.push({ file: file, url: URL.createObjectURL(file) }); }
+    });
+    if (ev.target.files.length) { ADD.cur = ADD.files.length - 1; }
+    ev.target.value = "";
+    renderViewer();
+  });
+  document.getElementById("vwDel").addEventListener("click", function () {
+    if (!ADD.files.length) { return; }
+    URL.revokeObjectURL(ADD.files[ADD.cur].url);
+    ADD.files.splice(ADD.cur, 1);
+    renderViewer();
+  });
+  document.getElementById("vwPrev").addEventListener("click", function () {
+    if (ADD.files.length) { ADD.cur = (ADD.cur - 1 + ADD.files.length) % ADD.files.length; renderViewer(); }
+  });
+  document.getElementById("vwNext").addEventListener("click", function () {
+    if (ADD.files.length) { ADD.cur = (ADD.cur + 1) % ADD.files.length; renderViewer(); }
+  });
 
   function applyTableThumb(v) { document.getElementById("hbBody").style.setProperty("--hbh", v + "px"); }
   try {
