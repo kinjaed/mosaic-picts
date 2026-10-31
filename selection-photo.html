@@ -158,7 +158,7 @@
   .act:hover:not(:disabled) { filter: brightness(1.1); }
   .act:active:not(:disabled) { transform: translateY(1px); }
   .act:disabled { opacity: .5; cursor: default; }
-  .act.add { background: var(--accent); padding: 8px 22px; }
+  .act.add { background: #2b86c5; padding: 8px 22px; }
   .g-btn.save { color: #fff; background: var(--save); border-color: transparent; }
   .g-btn.hist { color: #14284b; background: var(--hist); border-color: transparent; }
   .g-btn.save:hover:not(:disabled), .g-btn.hist:hover:not(:disabled) { filter: brightness(1.1); }
@@ -280,6 +280,11 @@
   /* ---- Date déjà enregistrée : remplacer / ajouter ---- */
   #dupOverlay, #wornOverlay { z-index: 60; }
   #brandOverlay { z-index: 70; }
+  #delOverlay { z-index: 60; }
+  .btn.danger { color: #fff; background: #d64545; border-color: #d64545; }
+  .btn.danger:hover:not(:disabled) { filter: brightness(1.08); }
+  .btn[hidden] { display: none; }
+  .add-dlg .dlg-foot { gap: 10px; align-items: center; }
   #brandLbl { font-weight: 600; }
   .dup input[type=text] { box-sizing: border-box; width: 100%; font: inherit; padding: 7px 12px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
   .dup .add-err { min-height: 0; }
@@ -378,12 +383,13 @@
         </div>
         <div class="vw-btns">
           <button id="vwAdd" class="g-btn" type="button">Ajouter une photo</button>
-          <button id="vwDel" class="g-btn" type="button">Supprimer</button>
+          <button id="vwDel" class="g-btn" type="button">Supprimer la photo</button>
         </div>
         <input id="vwFile" type="file" accept="image/*" multiple hidden>
       </div>
     </div>
     <div class="dlg-foot">
+      <button id="addDel" class="btn danger" type="button" hidden>Supprimer</button>
       <span id="addErr" class="add-err" role="alert"></span>
       <div class="add-btns">
         <button id="addCancel" class="btn ghost" type="button">Annuler</button>
@@ -401,6 +407,17 @@
     <div class="dup-btns">
       <button id="brandNo" class="btn ghost" type="button">Annuler</button>
       <button id="brandYes" class="btn primary" type="button">Ajouter</button>
+    </div>
+  </div>
+</div>
+
+<div id="delOverlay" class="overlay" role="dialog" aria-modal="true">
+  <div class="dup">
+    <p>Voulez-vous supprimer cet article de la base ou le retirer ?</p>
+    <div class="dup-btns">
+      <button id="delCancel" class="btn ghost" type="button">Annuler</button>
+      <button id="delRetire" class="btn primary" type="button">Retirer</button>
+      <button id="delRemove" class="btn danger" type="button">Supprimer</button>
     </div>
   </div>
 </div>
@@ -1512,6 +1529,10 @@
                 markSelected(false);
                 syncSelection();
               });
+              tr.addEventListener("dblclick", function (ev) {
+                if (ev.target.closest && ev.target.closest("select, input, button, label, img, textarea")) { return; }
+                openEdit(r.id);
+              });
               cols.forEach(function (c, ci) {
                 var td = document.createElement("td");
                 var type = (meta[c] && meta[c].type) || "";
@@ -1763,7 +1784,7 @@
       });
       box.appendChild(b);
     }
-    item("", "Toutes", total);
+    item("", "TOUS", total);
     items.forEach(function (t) { item(String(t.id), t.name, counts[String(t.id)] || 0); });
     box.scrollTop = top;
   }
@@ -1804,7 +1825,7 @@
      (sauf Cat_taille, Supprime et Select). Type est obligatoire.
      Les photos choisies sont téléversées au moment de l'ajout.
      ----------------------------------------------------------- */
-  var ADD = { ctrls: [], files: [], cur: 0, busy: false, photoCol: null, typeCol: null, onKey: null };
+  var ADD = { ctrls: [], files: [], cur: 0, busy: false, photoCol: null, typeCol: null, onKey: null, mode: "add", rowId: null };
   var ADD_SKIP = { cat_taille: 1, supprime: 1, select: 1, id: 1, manualsort: 1 };
 
   function addEl(tag, cls, text) {
@@ -1951,7 +1972,11 @@
       box.appendChild(lab);
       boxes.push(cb);
     });
-    return { el: box, vals: function () { return boxes.filter(function (b) { return b.checked; }).map(function (b) { return b.value; }); } };
+    return {
+      el: box,
+      vals: function () { return boxes.filter(function (b) { return b.checked; }).map(function (b) { return b.value; }); },
+      setVals: function (arr) { boxes.forEach(function (b) { b.checked = arr.indexOf(b.value) !== -1; }); }
+    };
   }
 
   function selectOf(options) {
@@ -1974,7 +1999,7 @@
       var lab = addEl("label", "sw sm"), cb = document.createElement("input");
       cb.type = "checkbox";
       lab.appendChild(cb); lab.appendChild(addEl("span", "track"));
-      return { el: lab, get: function () { return cb.checked ? true : undefined; } };
+      return { el: lab, get: function () { return cb.checked ? true : undefined; }, set: function (v) { cb.checked = !!v; } };
     }
     if (t === "Choice") {
       var sc = selectOf(m.choices.map(function (c) { return { value: c, label: c }; }));
@@ -1988,12 +2013,25 @@
             sc.appendChild(op);
           }
           sc.value = v;
+        },
+        set: function (v) {
+          var s2 = (v === null || v === undefined) ? "" : String(v);
+          if (s2 !== "" && !Array.prototype.some.call(sc.options, function (o) { return o.value === s2; })) {
+            var op = document.createElement("option");
+            op.value = s2; op.textContent = s2;
+            sc.appendChild(op);
+          }
+          sc.value = s2;
         }
       };
     }
     if (t === "ChoiceList") {
       var gc = chipGroup(m.choices.map(function (c) { return { value: c, label: c }; }));
-      return { el: gc.el, tall: true, get: function () { var v = gc.vals(); return v.length ? ["L"].concat(v) : undefined; } };
+      return {
+        el: gc.el, tall: true,
+        get: function () { var v = gc.vals(); return v.length ? ["L"].concat(v) : undefined; },
+        set: function (v) { gc.setVals(Array.isArray(v) ? listItems(v).map(String) : []); }
+      };
     }
     if (/^Ref:/.test(t)) {
       var ro1 = await refOptions(m);
@@ -2021,19 +2059,40 @@
         ctl.render(String(id));
       };
       ctl.get = function () { return sr.value !== "" ? Number(sr.value) : undefined; };
+      ctl.set = function (v) {
+        if (v === null || v === undefined || v === 0 || v === "") { sr.value = ""; return; }
+        var sid = String(v);
+        if (!Array.prototype.some.call(sr.options, function (o) { return o.value === sid; })) {
+          var found = ro1.opts.filter(function (o) { return String(o.id) === sid; })[0];
+          if (found) {
+            var op = document.createElement("option");
+            op.value = sid; op.textContent = found.name;
+            sr.appendChild(op);
+          }
+        }
+        sr.value = sid;
+      };
       ctl.render("");
       return ctl;
     }
     if (/^RefList:/.test(t)) {
       var ro = (await refOptions(m)).opts;
       var gr = chipGroup(ro.map(function (o) { return { value: String(o.id), label: o.name }; }));
-      return { el: gr.el, tall: true, get: function () { var v = gr.vals(); return v.length ? ["L"].concat(v.map(Number)) : undefined; } };
+      return {
+        el: gr.el, tall: true,
+        get: function () { var v = gr.vals(); return v.length ? ["L"].concat(v.map(Number)) : undefined; },
+        set: function (v) { gr.setVals(Array.isArray(v) ? listItems(v).map(String) : []); }
+      };
     }
     if (t === "Int" || t === "Numeric") {
       inp = document.createElement("input");
       inp.type = "number"; inp.step = t === "Int" ? "1" : "any";
       if (norm(m.colId) === "nb") { inp.value = "0"; }   // nb : 0 par défaut
-      return { el: inp, get: function () { return inp.value !== "" && isFinite(Number(inp.value)) ? Number(inp.value) : undefined; } };
+      return {
+        el: inp,
+        get: function () { return inp.value !== "" && isFinite(Number(inp.value)) ? Number(inp.value) : undefined; },
+        set: function (v) { inp.value = (v === null || v === undefined || v === "") ? "" : String(v); }
+      };
     }
     if (/^Date:?/.test(t) && t !== "DateTime" && !/^DateTime/.test(t)) {
       inp = document.createElement("input");
@@ -2041,7 +2100,7 @@
       return { el: inp, get: function () {
         var p = /^(\d{4})-(\d{2})-(\d{2})$/.exec(inp.value);
         return p ? Date.UTC(+p[1], +p[2] - 1, +p[3]) / 1000 : undefined;
-      } };
+      }, set: function (v) { inp.value = typeof v === "number" ? new Date(v * 1000).toISOString().slice(0, 10) : ""; } };
     }
     if (/^DateTime/.test(t)) {
       inp = document.createElement("input");
@@ -2049,19 +2108,28 @@
       return { el: inp, get: function () {
         var ms = inp.value ? new Date(inp.value).getTime() : NaN;
         return isFinite(ms) ? ms / 1000 : undefined;
+      }, set: function (v) {
+        if (typeof v !== "number") { inp.value = ""; return; }
+        var d = new Date(v * 1000), z = function (n) { return (n < 10 ? "0" : "") + n; };
+        inp.value = d.getFullYear() + "-" + z(d.getMonth() + 1) + "-" + z(d.getDate()) + "T" + z(d.getHours()) + ":" + z(d.getMinutes());
       } };
     }
     if (norm(m.colId) === "description") {
       inp = document.createElement("textarea");
       inp.rows = 2;
-      return { el: inp, tall: true, get: function () { return inp.value.trim() !== "" ? inp.value.trim() : undefined; } };
+      return {
+        el: inp, tall: true,
+        get: function () { return inp.value.trim() !== "" ? inp.value.trim() : undefined; },
+        set: function (v) { inp.value = (v === null || v === undefined) ? "" : String(v); }
+      };
     }
     inp = document.createElement("input");
     inp.type = "text";
     return {
       el: inp,
       get: function () { return inp.value.trim() !== "" ? inp.value.trim() : undefined; },
-      setValue: function (v) { inp.value = v; }
+      setValue: function (v) { inp.value = v; },
+      set: function (v) { inp.value = (v === null || v === undefined) ? "" : String(v); }
     };
   }
 
@@ -2075,8 +2143,8 @@
       ADD.cur = Math.max(0, Math.min(ADD.cur, n - 1));
       var f = ADD.files[ADD.cur];
       var img = document.createElement("img");
-      img.src = f.url; img.alt = f.file.name;
-      img.addEventListener("click", function () { openLightbox(f.url, f.file.name, null); });
+      img.src = f.url; img.alt = f.file ? f.file.name : "Photo";
+      img.addEventListener("click", function () { openLightbox(f.url, f.file ? f.file.name : "", null); });
       st.appendChild(img);
     }
     document.getElementById("vwCount").textContent = n ? (ADD.cur + 1) + " / " + n : "";
@@ -2183,9 +2251,10 @@
       var deps = [];
       evalCol(cond.recCol, deps);
       deps.forEach(function (d) { d.c.el.addEventListener("change", apply); });
+      x.cond = { apply: apply };
       apply();
     });
-    ADD.files.forEach(function (f) { URL.revokeObjectURL(f.url); });
+    ADD.files.forEach(function (f) { if (f.file) { URL.revokeObjectURL(f.url); } });
     ADD.files = []; ADD.cur = 0;
     document.getElementById("addViewer").style.display = ADD.photoCol ? "" : "none";
     document.getElementById("addErr").textContent = "";
@@ -2194,9 +2263,25 @@
 
   function closeAdd() {
     document.getElementById("addOverlay").classList.remove("on");
-    ADD.files.forEach(function (f) { URL.revokeObjectURL(f.url); });
+    ADD.files.forEach(function (f) { if (f.file) { URL.revokeObjectURL(f.url); } });
     ADD.files = [];
     if (ADD.onKey) { document.removeEventListener("keydown", ADD.onKey); ADD.onKey = null; }
+  }
+
+  // Titre et boutons selon le mode : ajout ou modification d'une ligne existante
+  function applyMode() {
+    var edit = ADD.mode === "edit";
+    document.getElementById("addTitle").textContent = edit ? "Modifier un habit" : "Ajouter un habit";
+    document.getElementById("addSubmit").textContent = edit ? "Enregistrer" : "Ajouter au dressing";
+    document.getElementById("addDel").hidden = !edit;
+  }
+
+  function showAdd() {
+    document.getElementById("addOverlay").classList.add("on");
+    ADD.onKey = function (ev) { if (ev.key === "Escape" && !ADD.busy) { closeAdd(); } };
+    document.addEventListener("keydown", ADD.onKey);
+    var first = document.querySelector("#addGrid input, #addGrid select, #addGrid textarea");
+    if (first) { first.focus(); }
   }
 
   async function openAdd() {
@@ -2205,12 +2290,10 @@
     try {
       var meta = await habitsMeta();
       if (!meta) { alert("Table « " + HABITS_TABLE + " » introuvable."); return; }
+      ADD.mode = "add"; ADD.rowId = null;
       await buildAddForm(meta);
-      document.getElementById("addOverlay").classList.add("on");
-      ADD.onKey = function (ev) { if (ev.key === "Escape" && !ADD.busy) { closeAdd(); } };
-      document.addEventListener("keydown", ADD.onKey);
-      var first = document.querySelector("#addGrid input, #addGrid select, #addGrid textarea");
-      if (first) { first.focus(); }
+      applyMode();
+      showAdd();
     } catch (e) {
       alert("Impossible d'ouvrir le formulaire : " + (e && e.message ? e.message : e));
     } finally {
@@ -2218,51 +2301,163 @@
     }
   }
 
+  // Remplit le formulaire avec les valeurs d'une ligne (les champs dépendants, ex. Taille, en dernier)
+  function fillForm(data, idx) {
+    function put(x) { if (x.c.set) { x.c.set(data[x.m.colId] ? data[x.m.colId][idx] : undefined); } }
+    ADD.ctrls.filter(function (x) { return !x.cond; }).forEach(put);
+    ADD.ctrls.forEach(function (x) { if (x.cond) { x.cond.apply(); } });
+    ADD.ctrls.filter(function (x) { return x.cond; }).forEach(put);
+  }
+
+  // Double clic sur une ligne : formulaire de modification
+  async function openEdit(id) {
+    if (ADD.busy || document.getElementById("addOverlay").classList.contains("on")) { return; }
+    try {
+      var meta = await habitsMeta();
+      if (!meta) { return; }
+      var data = await grist.docApi.fetchTable(HABITS_TABLE);
+      var idx = data.id.indexOf(id);
+      if (idx < 0) { return; }
+      ADD.mode = "edit"; ADD.rowId = id;
+      await buildAddForm(meta);
+      fillForm(data, idx);
+      if (ADD.photoCol && data[ADD.photoCol]) {
+        var tok = await galleryToken();
+        ADD.files = listItems(data[ADD.photoCol][idx]).filter(function (n) { return typeof n === "number"; }).map(function (n) {
+          return { att: n, url: tok.baseUrl + "/attachments/" + n + "/download?auth=" + tok.token };
+        });
+        ADD.cur = 0;
+        renderViewer();
+      }
+      applyMode();
+      showAdd();
+    } catch (e) {
+      alert("Impossible d'ouvrir le formulaire : " + (e && e.message ? e.message : e));
+    }
+  }
+
+  // Valeur utilisée pour vider un champ lors d'une modification
+  function clearValue(m) {
+    if (m.type === "Bool") { return false; }
+    if (/^Ref:/.test(m.type)) { return 0; }
+    if (m.type === "Text" || m.type === "Choice") { return ""; }
+    return null;
+  }
+
   async function submitAdd() {
     if (ADD.busy) { return; }
+    var edit = ADD.mode === "edit";
     var err = document.getElementById("addErr");
     err.textContent = "";
-    var fields = {};
-    ADD.ctrls.forEach(function (x) {
-      x.c.el.classList.remove("af-bad");
-      var v = x.c.get();
-      if (v !== undefined) { fields[x.m.colId] = v; }
-    });
-    if (ADD.typeCol && fields[ADD.typeCol] === undefined) {
-      ADD.ctrls.forEach(function (x) {
-        if (x.m.colId === ADD.typeCol) { x.c.el.classList.add("af-bad"); var f = x.c.el.querySelector ? (x.c.el.matches("input,select,textarea") ? x.c.el : x.c.el.querySelector("input,select,textarea")) : null; if (f) { f.focus(); } }
-      });
-      err.textContent = "Le champ Type est obligatoire.";
-      return;
-    }
-    var submit = document.getElementById("addSubmit");
-    ADD.busy = true; submit.disabled = true; submit.textContent = "Ajout…";
-    try {
-      if (ADD.files.length && ADD.photoCol) {
-        try {
-          var ids = await uploadPhotos(ADD.files);
-          fields[ADD.photoCol] = ["L"].concat(ids);
-        } catch (upErr) {
-          var why = upErr && upErr.message ? upErr.message : String(upErr);
-          var go = await askWorn("Les photos n'ont pas pu être téléversées (" + why + "). Ajouter l'habit sans photo ?");
-          if (!go) { throw new Error("photos non téléversées (" + why + ")"); }
-        }
+    var raws = ADD.ctrls.map(function (x) { x.c.el.classList.remove("af-bad"); return x.c.get(); });
+    var missingType = false;
+    ADD.ctrls.forEach(function (x, k) {
+      if (x.m.colId === ADD.typeCol && raws[k] === undefined) {
+        missingType = true;
+        x.c.el.classList.add("af-bad");
+        var f = x.c.el.matches("input,select,textarea") ? x.c.el : x.c.el.querySelector("input,select,textarea");
+        if (f) { f.focus(); }
       }
-      var res = await grist.docApi.applyUserActions([["AddRecord", HABITS_TABLE, null, fields]]);
-      var nid = res && res.retValues ? res.retValues[0] : null;
-      if (typeof nid === "number") { HB.selectedId = nid; }
+    });
+    if (missingType) { err.textContent = "Le champ Type est obligatoire."; return; }
+    var fields = {};
+    ADD.ctrls.forEach(function (x, k) {
+      if (raws[k] !== undefined) { fields[x.m.colId] = raws[k]; }
+      else if (edit) { fields[x.m.colId] = clearValue(x.m); }
+    });
+    var submit = document.getElementById("addSubmit"), del = document.getElementById("addDel");
+    ADD.busy = true; submit.disabled = true; del.disabled = true;
+    submit.textContent = edit ? "Enregistrement…" : "Ajout…";
+    try {
+      if (ADD.photoCol) {
+        var keep = ADD.files.filter(function (f) { return f.att; }).map(function (f) { return f.att; });
+        var fresh = ADD.files.filter(function (f) { return f.file; });
+        var added = [];
+        if (fresh.length) {
+          try {
+            added = await uploadPhotos(fresh);
+          } catch (upErr) {
+            var why = upErr && upErr.message ? upErr.message : String(upErr);
+            var go = await askWorn("Les photos n'ont pas pu être téléversées (" + why + "). " + (edit ? "Enregistrer sans les nouvelles photos ?" : "Ajouter l'habit sans photo ?"));
+            if (!go) { throw new Error("photos non téléversées (" + why + ")"); }
+          }
+        }
+        var all = keep.concat(added);
+        if (edit) { fields[ADD.photoCol] = all.length ? ["L"].concat(all) : null; }
+        else if (all.length) { fields[ADD.photoCol] = ["L"].concat(all); }
+      }
+      if (edit) {
+        await grist.docApi.applyUserActions([["UpdateRecord", HABITS_TABLE, ADD.rowId, fields]]);
+      } else {
+        var res = await grist.docApi.applyUserActions([["AddRecord", HABITS_TABLE, null, fields]]);
+        var nid = res && res.retValues ? res.retValues[0] : null;
+        if (typeof nid === "number") { HB.selectedId = nid; }
+      }
       closeAdd();
       syncSelection();
       HB.sig = null;
       scheduleHabits();
       scheduleGallery();
     } catch (e) {
-      err.textContent = "Échec de l'ajout : " + (e && e.message ? e.message : e);
+      err.textContent = (edit ? "Échec de l'enregistrement : " : "Échec de l'ajout : ") + (e && e.message ? e.message : e);
     }
-    ADD.busy = false; submit.disabled = false; submit.textContent = "Ajouter au dressing";
+    ADD.busy = false; submit.disabled = false; del.disabled = false;
+    submit.textContent = edit ? "Enregistrer" : "Ajouter au dressing";
+  }
+
+  // Fenêtre à trois boutons : renvoie "retire", "delete" ou null (annuler)
+  function askDelete() {
+    return new Promise(function (resolve) {
+      var ov = document.getElementById("delOverlay");
+      function done(r) {
+        ov.classList.remove("on");
+        document.removeEventListener("keydown", onKey, true);
+        resolve(r);
+      }
+      function onKey(ev) { if (ev.key === "Escape") { ev.stopImmediatePropagation(); done(null); } }
+      document.addEventListener("keydown", onKey, true);
+      document.getElementById("delCancel").onclick = function () { done(null); };
+      document.getElementById("delRetire").onclick = function () { done("retire"); };
+      document.getElementById("delRemove").onclick = function () { done("delete"); };
+      ov.classList.add("on");
+      document.getElementById("delCancel").focus();
+    });
+  }
+
+  // « Supprimer » du formulaire de modification : Retirer (Supprime = vrai) ou supprimer définitivement
+  async function deleteFromEdit() {
+    if (ADD.mode !== "edit" || ADD.busy) { return; }
+    var choice = await askDelete();
+    if (!choice) { return; }
+    var id = ADD.rowId, err = document.getElementById("addErr");
+    err.textContent = "";
+    try {
+      if (choice === "retire") {
+        var sc = null;
+        for (var k in HB.meta) { if (norm(HB.meta[k].colId) === "supprime") { sc = HB.meta[k].colId; } }
+        if (!sc) { throw new Error("colonne « Supprime » introuvable"); }
+        var f = {};
+        f[sc] = true;
+        await grist.docApi.applyUserActions([["UpdateRecord", HABITS_TABLE, id, f]]);
+      } else {
+        var ok = await askWorn("Cet article sera définitivement supprimé. Confirmer ?");
+        if (!ok) { return; }
+        await grist.docApi.applyUserActions([["RemoveRecord", HABITS_TABLE, id]]);
+      }
+    } catch (e) {
+      err.textContent = "Échec : " + (e && e.message ? e.message : e);
+      return;
+    }
+    if (HB.selectedId === id) { HB.selectedId = null; }
+    closeAdd();
+    syncSelection();
+    HB.sig = null;
+    scheduleHabits();
+    scheduleGallery();
   }
 
   document.getElementById("addBtn").addEventListener("click", openAdd);
+  document.getElementById("addDel").addEventListener("click", deleteFromEdit);
   document.getElementById("addX").addEventListener("click", closeAdd);
   document.getElementById("addCancel").addEventListener("click", closeAdd);
   document.getElementById("addSubmit").addEventListener("click", submitAdd);
@@ -2277,7 +2472,7 @@
   });
   document.getElementById("vwDel").addEventListener("click", function () {
     if (!ADD.files.length) { return; }
-    URL.revokeObjectURL(ADD.files[ADD.cur].url);
+    if (ADD.files[ADD.cur].file) { URL.revokeObjectURL(ADD.files[ADD.cur].url); }
     ADD.files.splice(ADD.cur, 1);
     renderViewer();
   });
@@ -2327,7 +2522,7 @@
   document.getElementById("hbSel").checked = HB.only;
   document.getElementById("hbSel").addEventListener("change", function (ev) {
     HB.only = ev.target.checked;
-    if (HB.only) { HB.typeSel = ""; }   // « Sélectionnés » : retour automatique à « Toutes »
+    if (HB.only) { HB.typeSel = ""; HB.empSel = ""; }   // « Sélectionnés » : retour automatique à « TOUS » (types et emplacements)
     try { localStorage.setItem("selectionPhoto.only", HB.only ? "1" : "0"); } catch (e) { /* non mémorisé */ }
     HB.sig = null;
     refreshHabits();
