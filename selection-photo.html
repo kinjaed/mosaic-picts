@@ -100,6 +100,9 @@
   .hb-head { display: flex; align-items: center; gap: 10px; }
   .hb-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
   .g-head input.hb-size[type=range] { margin-left: auto; width: 110px; }
+  .hb-search { flex: 0 1 190px; min-width: 90px; box-sizing: border-box; font: inherit; font-size: 12px; padding: 3px 10px; color: #143a22; background: #dcf5e3; border: 1px solid #a9dcb8; border-radius: 999px; }
+  .hb-search::placeholder { color: #4f7a5c; }
+  .hb-search:focus { outline: 2px solid #6fcf8e; outline-offset: 1px; }
   .g-btn { flex: none; padding: 2px 10px; font: inherit; font-size: 12px; color: var(--text); background: var(--bg); border: 1px solid var(--edge); border-radius: 8px; cursor: pointer; }
   .g-btn:hover { background: var(--border); }
   .panel.gallery.collapsed, .panel.habits.collapsed { flex: none; min-height: 0; }
@@ -306,16 +309,6 @@
 <body>
 
 <div class="root">
-<div class="wrap">
-  <section class="panel choices">
-    <div id="bar" class="bar">
-      <span class="hint" id="hint">Chargement…</span>
-    </div>
-  </section>
-  <aside class="panel actions">
-    <button id="addBtn" class="act add" type="button" title="Ajouter un habit à la table Mes_habits">Ajouter</button>
-  </aside>
-</div>
 <section id="gallery" class="panel gallery">
   <div class="g-head">
     <span class="g-title">Photos</span>
@@ -328,12 +321,23 @@
   </div>
   <div id="gBody" class="g-body"></div>
 </section>
+<div class="wrap">
+  <section class="panel choices">
+    <div id="bar" class="bar">
+      <span class="hint" id="hint">Chargement…</span>
+    </div>
+  </section>
+  <aside class="panel actions">
+    <button id="addBtn" class="act add" type="button" title="Ajouter un habit à la table Mes_habits">Ajouter</button>
+  </aside>
+</div>
 <section id="habits" class="panel habits">
   <div class="g-head hb-head">
     <div class="hb-left">
       <span class="g-title">Liste des habits</span>
       <span id="hbCount" class="g-count"></span>
     </div>
+    <input id="hbSearch" class="hb-search" type="search" placeholder="Rechercher…" aria-label="Rechercher dans le tableau" title="Filtre les lignes contenant le texte (toutes les colonnes)" autocomplete="off">
     <input id="hbSize" class="hb-size" type="range" min="30" max="200" value="56" aria-label="Taille des photos du tableau" title="Taille des photos du tableau">
     <label class="sw hb-right" title="Afficher uniquement les lignes dont la colonne Select n'est pas vide">
       <span>Sélectionnés</span>
@@ -1290,7 +1294,7 @@
   var HABIT_COLS = ["Emplacement", "Marque", "Couleur", "Taille", "Description", "nb", "Note", "Photo", "A_ranger"];
   var MIN_COLS = { nb: 1, Note: 1, A_ranger: 1 };
   var CANON = HABIT_COLS.concat(["Select", "Supprime", "Type"]);
-  var HB = { busy: false, again: false, sig: null, timer: null, only: false, meta: null, selRules: [],
+  var HB = { search: "", busy: false, again: false, sig: null, timer: null, only: false, meta: null, selRules: [],
             selectedId: null, cursorId: null, valById: {}, nbById: {}, typeSel: "", typeSig: null, empSel: "", empSig: null, rangerOnly: false };
 
   // Comparaison de noms de colonnes sans tenir compte de la casse ni des accents
@@ -1455,6 +1459,15 @@
           if (HB.rangerOnly && data.A_ranger && data.A_ranger[i] !== true) { return; }
           base.push(i);
         });
+        // recherche : tous les mots saisis doivent figurer dans le texte des colonnes affichées
+        var words = norm(HB.search).split(/\s+/).filter(Boolean);
+        if (words.length) {
+          base = base.filter(function (i) {
+            var hay = norm(cols.filter(function (c) { return c !== "Photo"; })
+              .map(function (c) { return cellText(c, data[c][i], meta, refs); }).join(" "));
+            return words.every(function (w) { return hay.indexOf(w) !== -1; });
+          });
+        }
 
         // type(s) et emplacement(s) de chaque ligne ; nombre de lignes par valeur
         // (les comptes d'une liste tiennent compte de la sélection de l'autre liste)
@@ -2528,6 +2541,16 @@
     refreshHabits();
   });
 
+  (function () {
+    var box = document.getElementById("hbSearch"), tm = null;
+    box.addEventListener("input", function () {
+      clearTimeout(tm);
+      tm = setTimeout(function () { HB.search = box.value; HB.sig = null; refreshHabits(); }, 200);
+    });
+    box.addEventListener("keydown", function (ev) {
+      if (ev.key === "Escape" && box.value) { ev.stopPropagation(); box.value = ""; HB.search = ""; HB.sig = null; refreshHabits(); }
+    });
+  })();
   try { HB.rangerOnly = localStorage.getItem("selectionPhoto.ranger") === "1"; } catch (e) { /* valeur par défaut */ }
   document.getElementById("hbRanger").checked = HB.rangerOnly;
   document.getElementById("hbRanger").addEventListener("change", function (ev) {
