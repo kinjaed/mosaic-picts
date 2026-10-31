@@ -1826,7 +1826,10 @@
         try {
           var resp = await fetch(
             modes[k] === "query" ? bases[b] + "/attachments?auth=" + encodeURIComponent(tok.token) : bases[b] + "/attachments",
-            { method: "POST", body: fd, headers: modes[k] === "bearer" ? { Authorization: "Bearer " + tok.token } : undefined }
+            // X-Requested-With est exigé par Grist pour les envois (POST) depuis un widget
+            { method: "POST", body: fd, headers: modes[k] === "bearer"
+                ? { "X-Requested-With": "XMLHttpRequest", Authorization: "Bearer " + tok.token }
+                : { "X-Requested-With": "XMLHttpRequest" } }
           );
           if (!resp.ok) {
             var txt = "";
