@@ -179,6 +179,13 @@
   }
   .af-grid textarea { resize: vertical; min-height: 56px; }
   .af-grid .af-bad { border-color: #d64545 !important; box-shadow: 0 0 0 2px rgba(214, 69, 69, .25); }
+  .af-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .af-row > select, .af-row > input { flex: 1; min-width: 0; }
+  .af-row .g-btn { padding: 2px 10px; font-weight: 700; }
+  .af-pair { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .af-sub { color: var(--muted); font-weight: 600; font-size: 13px; }
+  .af-grid .af-pair select { width: auto; }
+  .af-grid .af-pair input[type=number] { width: 4.2em; padding: 6px 6px; text-align: center; }
   .chips { display: flex; flex-wrap: wrap; gap: 4px 12px; }
   .chip { display: flex; align-items: center; gap: 4px; font-size: 13px; cursor: pointer; }
   .viewer { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
@@ -271,6 +278,11 @@
 
   /* ---- Date déjà enregistrée : remplacer / ajouter ---- */
   #dupOverlay, #wornOverlay { z-index: 60; }
+  #brandOverlay { z-index: 70; }
+  #brandLbl { font-weight: 600; }
+  .dup input[type=text] { box-sizing: border-box; width: 100%; font: inherit; padding: 7px 12px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+  .dup .add-err { min-height: 0; }
+  .dup .add-err:empty { display: none; }
   .dup { width: min(380px, 100%); display: flex; flex-direction: column; gap: 14px; padding: 16px 18px; background: var(--bg); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 16px 40px rgba(0, 0, 0, .35); }
   .dup p { margin: 0; line-height: 1.45; }
   .dup-btns { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
@@ -370,6 +382,18 @@
         <button id="addCancel" class="btn ghost" type="button">Annuler</button>
         <button id="addSubmit" class="btn primary" type="button">Ajouter au dressing</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<div id="brandOverlay" class="overlay" role="dialog" aria-modal="true" aria-labelledby="brandLbl">
+  <div class="dup">
+    <label id="brandLbl" for="brandInput">Nouvelle marque</label>
+    <input id="brandInput" type="text" autocomplete="off" placeholder="Nom de la marque">
+    <p id="brandErr" class="add-err"></p>
+    <div class="dup-btns">
+      <button id="brandNo" class="btn ghost" type="button">Annuler</button>
+      <button id="brandYes" class="btn primary" type="button">Ajouter</button>
     </div>
   </div>
 </div>
@@ -1267,7 +1291,8 @@
         var wo = {};
         try { wo = JSON.parse(C.widgetOptions[j] || "{}"); } catch (e) { wo = {}; }
         meta[C.colId[j]] = {
-          colId: C.colId[j], isFormula: !!(C.isFormula && C.isFormula[j]), pos: C.parentPos ? C.parentPos[j] : j,
+          colId: C.colId[j], ref: C.id[j], formula: C.formula ? (C.formula[j] || "") : "",
+          dropText: (wo.dropdownCondition && wo.dropdownCondition.text) || "", isFormula: !!(C.isFormula && C.isFormula[j]), pos: C.parentPos ? C.parentPos[j] : j,
           type: C.type[j] || "Any", label: C.label[j] || C.colId[j], visible: nameById[C.visibleCol[j]] || null,
           choices: Array.isArray(wo.choices) ? wo.choices : [], colors: wo.choiceOptions || {}
         };
@@ -1277,19 +1302,20 @@
         }
       }
     }
-    // Mises en forme conditionnelles définies au niveau de la vue (champ) pour la colonne Select
-    if (selColRef !== null) {
-      try {
-        var F = await grist.docApi.fetchTable("_grist_Views_section_field");
-        for (var f = 0; f < F.id.length; f++) {
-          if (F.colRef[f] === selColRef && F.rules) {
-            var fwo = {};
-            try { fwo = JSON.parse(F.widgetOptions[f] || "{}"); } catch (e) { fwo = {}; }
-            ruleSet(F.rules[f], fwo);
-          }
-        }
-      } catch (e) { /* on retombe sur les couleurs du choix */ }
-    }
+    // Réglages définis au niveau de la vue (champ) : règles de mise en forme de Select
+    // et condition de liste déroulante (ex. choice.Cat == $Cat_taille)
+    try {
+      var F = await grist.docApi.fetchTable("_grist_Views_section_field");
+      for (var f = 0; f < F.id.length; f++) {
+        var fcol = nameById[F.colRef[f]];
+        var fm = fcol ? meta[fcol] : null;
+        if (!fm || fm.ref !== F.colRef[f]) { continue; }
+        var fwo = {};
+        try { fwo = JSON.parse(F.widgetOptions[f] || "{}"); } catch (e) { fwo = {}; }
+        if (F.colRef[f] === selColRef && F.rules) { ruleSet(F.rules[f], fwo); }
+        if (!fm.dropText && fwo.dropdownCondition && fwo.dropdownCondition.text) { fm.dropText = fwo.dropdownCondition.text; }
+      }
+    } catch (e) { /* on retombe sur les réglages de la colonne */ }
     HB.selRules = sets;
     HB.meta = meta;
     return meta;
@@ -1754,18 +1780,127 @@
     return e;
   }
 
+  // Options d'une colonne Ref : { opts: [{id, name, idx}], t: données de la table liée }
   async function refOptions(m) {
-    var out = [];
+    var out = { opts: [], t: null };
     try {
       var t = await grist.docApi.fetchTable(m.type.split(":")[1]);
+      out.t = t;
       t.id.forEach(function (id, n) {
         var v = m.visible && t[m.visible] ? t[m.visible][n] : id;
         var name = (v === null || v === undefined) ? "" : String(v);
-        if (name !== "") { out.push({ id: id, name: name }); }
+        if (name !== "") { out.opts.push({ id: id, name: name, idx: n }); }
       });
-      out.sort(function (a, b) { return a.name.localeCompare(b.name, "fr", { sensitivity: "base" }); });
+      out.opts.sort(function (a, b) { return a.name.localeCompare(b.name, "fr", { sensitivity: "base" }); });
     } catch (e) { /* liste vide */ }
     return out;
+  }
+
+  function findKey(t, name) {
+    var keys = Object.keys(t);
+    for (var i = 0; i < keys.length; i++) { if (norm(keys[i]) === norm(name)) { return keys[i]; } }
+    return null;
+  }
+
+  // « choice.Cat == $Cat_taille »  ->  { attr: "Cat", recCol: "Cat_taille" }
+  function parseCond(text) {
+    if (!text) { return null; }
+    var a = /^\s*choice\.(\w+)\s*==\s*(?:\$|rec\.)(\w+)\s*$/.exec(text);
+    if (a) { return { attr: a[1], recCol: a[2] }; }
+    var b = /^\s*(?:\$|rec\.)(\w+)\s*==\s*choice\.(\w+)\s*$/.exec(text);
+    if (b) { return { attr: b[2], recCol: b[1] }; }
+    return null;
+  }
+
+  // Téléverse les photos dans Grist. Plusieurs méthodes sont tentées ; l'erreur détaille chaque essai.
+  async function uploadPhotos(files) {
+    var tok = await grist.docApi.getAccessToken({ readOnly: false });
+    var bases = [tok.baseUrl];
+    if (/^http:/.test(tok.baseUrl) && location.protocol === "https:") { bases.push(tok.baseUrl.replace(/^http:/, "https:")); }
+    var tries = [];
+    for (var b = 0; b < bases.length; b++) {
+      var modes = ["query", "bearer"];
+      for (var k = 0; k < modes.length; k++) {
+        var fd = new FormData();
+        files.forEach(function (f) { fd.append("upload", f.file, f.file.name); });
+        try {
+          var resp = await fetch(
+            modes[k] === "query" ? bases[b] + "/attachments?auth=" + encodeURIComponent(tok.token) : bases[b] + "/attachments",
+            { method: "POST", body: fd, headers: modes[k] === "bearer" ? { Authorization: "Bearer " + tok.token } : undefined }
+          );
+          if (!resp.ok) {
+            var txt = "";
+            try { txt = (await resp.text()).slice(0, 100); } catch (e) { /* sans détail */ }
+            throw new Error("code " + resp.status + (txt ? " " + txt : ""));
+          }
+          return await resp.json();
+        } catch (e) {
+          tries.push((modes[k] === "query" ? "auth" : "Bearer") + " : " + (e && e.message ? e.message : e));
+        }
+      }
+    }
+    throw new Error(tries.join(" | "));
+  }
+
+  // Fenêtre « Nouvelle marque » : renvoie le texte saisi ou null
+  function askBrand() {
+    return new Promise(function (resolve) {
+      var ov = document.getElementById("brandOverlay"), inp = document.getElementById("brandInput"), err = document.getElementById("brandErr");
+      inp.value = ""; err.textContent = "";
+      function done(v) {
+        ov.classList.remove("on");
+        document.removeEventListener("keydown", onKey, true);
+        resolve(v);
+      }
+      function ok() {
+        var v = inp.value.trim();
+        if (!v) { err.textContent = "Saisissez un nom de marque."; inp.focus(); return; }
+        done(v);
+      }
+      function onKey(ev) {
+        if (ev.key === "Escape") { ev.stopImmediatePropagation(); done(null); }
+        else if (ev.key === "Enter" && ev.target === inp) { ev.preventDefault(); ok(); }
+      }
+      document.addEventListener("keydown", onKey, true);
+      document.getElementById("brandYes").onclick = ok;
+      document.getElementById("brandNo").onclick = function () { done(null); };
+      ov.classList.add("on");
+      inp.focus();
+    });
+  }
+
+  // Ajoute une marque non listée dans la table Marques (colonne Marque) puis la sélectionne
+  async function addBrand(c, m) {
+    var name = await askBrand();
+    if (!name) { return; }
+    if (c.ro) {
+      var same = c.ro.opts.filter(function (o) { return norm(o.name) === norm(name); })[0];
+      if (same) { c.render(String(same.id)); return; }
+    }
+    var tbl = /^Ref:/.test(m.type) ? m.type.split(":")[1] : "Marques";
+    var col = m.visible || "Marque";
+    var fields = {};
+    fields[col] = name;
+    var res;
+    try {
+      res = await grist.docApi.applyUserActions([["AddRecord", tbl, null, fields]]);
+    } catch (e) {
+      alert("Impossible d'ajouter la marque : " + (e && e.message ? e.message : e));
+      return;
+    }
+    var nid = res && res.retValues ? res.retValues[0] : null;
+    if (c.addOption && typeof nid === "number") { c.addOption(nid, name); }
+    else if (c.setValue) { c.setValue(name); }
+  }
+
+  function brandRow(c, m) {
+    var row = addEl("div", "af-row");
+    row.appendChild(c.el);
+    var plus = addEl("button", "g-btn", "+");
+    plus.type = "button"; plus.title = "Ajouter une marque non listée"; plus.setAttribute("aria-label", "Ajouter une marque");
+    plus.addEventListener("click", function () { addBrand(c, m); });
+    row.appendChild(plus);
+    return row;
   }
 
   function chipGroup(options) {
@@ -1806,25 +1941,61 @@
     }
     if (t === "Choice") {
       var sc = selectOf(m.choices.map(function (c) { return { value: c, label: c }; }));
-      return { el: sc, get: function () { return sc.value !== "" ? sc.value : undefined; } };
+      return {
+        el: sc,
+        get: function () { return sc.value !== "" ? sc.value : undefined; },
+        setValue: function (v) {
+          if (!Array.prototype.some.call(sc.options, function (o) { return o.value === v; })) {
+            var op = document.createElement("option");
+            op.value = v; op.textContent = v;
+            sc.appendChild(op);
+          }
+          sc.value = v;
+        }
+      };
     }
     if (t === "ChoiceList") {
       var gc = chipGroup(m.choices.map(function (c) { return { value: c, label: c }; }));
       return { el: gc.el, tall: true, get: function () { var v = gc.vals(); return v.length ? ["L"].concat(v) : undefined; } };
     }
     if (/^Ref:/.test(t)) {
-      var opts = await refOptions(m);
-      var sr = selectOf(opts.map(function (o) { return { value: String(o.id), label: o.name }; }));
-      return { el: sr, get: function () { return sr.value !== "" ? Number(sr.value) : undefined; } };
+      var ro1 = await refOptions(m);
+      var sr = document.createElement("select");
+      var ctl = { el: sr, ro: ro1, filter: null, blocked: false, blockedText: "" };
+      // (re)construit la liste en appliquant la condition éventuelle ; keep = valeur à conserver
+      ctl.render = function (keep) {
+        var cur = keep !== undefined ? keep : sr.value;
+        sr.innerHTML = "";
+        var none = document.createElement("option");
+        none.value = ""; none.textContent = ctl.blocked ? ctl.blockedText : "";
+        sr.appendChild(none);
+        var list = ro1.opts.filter(function (o) { return !ctl.filter || ctl.filter(o); });
+        list.forEach(function (o) {
+          var op = document.createElement("option");
+          op.value = String(o.id); op.textContent = o.name;
+          sr.appendChild(op);
+        });
+        sr.value = list.some(function (o) { return String(o.id) === String(cur); }) ? String(cur) : "";
+        sr.disabled = ctl.blocked;
+      };
+      ctl.addOption = function (id, name) {
+        ro1.opts.push({ id: id, name: name, idx: -1 });
+        ro1.opts.sort(function (a, b) { return a.name.localeCompare(b.name, "fr", { sensitivity: "base" }); });
+        ctl.render(String(id));
+      };
+      ctl.get = function () { return sr.value !== "" ? Number(sr.value) : undefined; };
+      ctl.render("");
+      return ctl;
     }
     if (/^RefList:/.test(t)) {
-      var ro = await refOptions(m);
+      var ro = (await refOptions(m)).opts;
       var gr = chipGroup(ro.map(function (o) { return { value: String(o.id), label: o.name }; }));
       return { el: gr.el, tall: true, get: function () { var v = gr.vals(); return v.length ? ["L"].concat(v.map(Number)) : undefined; } };
     }
     if (t === "Int" || t === "Numeric") {
       inp = document.createElement("input");
       inp.type = "number"; inp.step = t === "Int" ? "1" : "any";
+      if (norm(m.colId) === "nb") { inp.value = "0"; }   // nb : 0 par défaut
       return { el: inp, get: function () { return inp.value !== "" && isFinite(Number(inp.value)) ? Number(inp.value) : undefined; } };
     }
     if (/^Date:?/.test(t) && t !== "DateTime" && !/^DateTime/.test(t)) {
@@ -1850,7 +2021,11 @@
     }
     inp = document.createElement("input");
     inp.type = "text";
-    return { el: inp, get: function () { return inp.value.trim() !== "" ? inp.value.trim() : undefined; } };
+    return {
+      el: inp,
+      get: function () { return inp.value.trim() !== "" ? inp.value.trim() : undefined; },
+      setValue: function (v) { inp.value = v; }
+    };
   }
 
   function renderViewer() {
@@ -1901,15 +2076,78 @@
     grid.innerHTML = "";
     ADD.ctrls = [];
     for (var i = 0; i < fields.length; i++) {
-      var fm = fields[i];
-      var c = await makeControl(fm);
-      var lab = addEl("label", "", fm.label || fm.colId);
-      if (c.tall) { lab.className = "tall"; }
-      if (fm.colId === ADD.typeCol) { lab.className += " req"; }
-      grid.appendChild(lab);
-      grid.appendChild(c.el);
-      ADD.ctrls.push({ m: fm, c: c });
+      ADD.ctrls.push({ m: fields[i], c: await makeControl(fields[i]) });
     }
+    function labelFor(x) {
+      var lab = addEl("label", "", x.m.label || x.m.colId);
+      if (x.c.tall) { lab.className = "tall"; }
+      if (x.m.colId === ADD.typeCol) { lab.className += " req"; }
+      return lab;
+    }
+    var nbX = ADD.ctrls.filter(function (x) { return norm(x.m.colId) === "nb"; })[0];
+    var noteX = ADD.ctrls.filter(function (x) { return norm(x.m.colId) === "note"; })[0];
+    var pairDone = false;
+    ADD.ctrls.forEach(function (x) {
+      if (nbX && noteX && (x === nbX || x === noteX)) {
+        // nb et Note : champs réduits, côte à côte sur une même ligne
+        if (pairDone) { return; }
+        pairDone = true;
+        grid.appendChild(labelFor(nbX));
+        var pair = addEl("div", "af-pair");
+        pair.appendChild(nbX.c.el);
+        pair.appendChild(addEl("span", "af-sub", noteX.m.label || noteX.m.colId));
+        pair.appendChild(noteX.c.el);
+        grid.appendChild(pair);
+        return;
+      }
+      grid.appendChild(labelFor(x));
+      grid.appendChild(norm(x.m.colId) === "marque" ? brandRow(x.c, x.m) : x.c.el);
+    });
+
+    // Condition de liste déroulante (ex. Taille : choice.Cat == $Cat_taille)
+    function findCtrl(name) { return ADD.ctrls.filter(function (x) { return norm(x.m.colId) === norm(name); })[0]; }
+    function findMeta(name) {
+      for (var mk in meta) { if (norm(meta[mk].colId) === norm(name)) { return meta[mk]; } }
+      return null;
+    }
+    // Valeur d'une colonne de Mes_habits pour la ligne en cours de saisie :
+    // champ du formulaire, ou colonne formule du type $Type.xxx calculée depuis le type choisi.
+    // Renvoie null si on ne sait pas l'évaluer, { ok:false } si le type n'est pas choisi.
+    function evalCol(name, deps) {
+      var c = findCtrl(name);
+      if (c) { deps.push(c); var v = c.c.get(); return v === undefined ? { ok: false } : { ok: true, value: v }; }
+      var cm = findMeta(name), mm = cm && cm.formula ? /^\s*(?:\$|rec\.)(\w+)\.(\w+)\s*$/.exec(cm.formula) : null;
+      var base = mm ? findCtrl(mm[1]) : findCtrl(ADD.typeCol || "");
+      var attr = mm ? mm[2] : name;
+      if (!base || !base.c.ro || !base.c.ro.t) { return null; }
+      var key = findKey(base.c.ro.t, attr) || (mm ? null : findKey(base.c.ro.t, "Cat"));
+      if (!key) { return null; }
+      deps.push(base);
+      var id = base.c.get();
+      if (id === undefined) { return { ok: false }; }
+      var idx = base.c.ro.t.id.indexOf(id);
+      return idx < 0 ? { ok: false } : { ok: true, value: base.c.ro.t[key][idx] };
+    }
+    ADD.ctrls.forEach(function (x) {
+      var cond = parseCond(x.m.dropText || (norm(x.m.colId) === "taille" ? "choice.Cat == $Cat_taille" : ""));
+      if (!cond || !x.c.render || !x.c.ro || !x.c.ro.t) { return; }
+      var key = findKey(x.c.ro.t, cond.attr);
+      if (!key) { return; }
+      function apply() {
+        var r = evalCol(cond.recCol, []);
+        if (r === null) { x.c.filter = null; x.c.blocked = false; }
+        else if (!r.ok) { x.c.filter = function () { return false; }; x.c.blocked = true; x.c.blockedText = "Choisir d'abord le type"; }
+        else {
+          x.c.blocked = false;
+          x.c.filter = function (o) { return o.idx < 0 || String(x.c.ro.t[key][o.idx]) === String(r.value); };
+        }
+        x.c.render();
+      }
+      var deps = [];
+      evalCol(cond.recCol, deps);
+      deps.forEach(function (d) { d.c.el.addEventListener("change", apply); });
+      apply();
+    });
     ADD.files.forEach(function (f) { URL.revokeObjectURL(f.url); });
     ADD.files = []; ADD.cur = 0;
     document.getElementById("addViewer").style.display = ADD.photoCol ? "" : "none";
@@ -1964,13 +2202,14 @@
     ADD.busy = true; submit.disabled = true; submit.textContent = "Ajout…";
     try {
       if (ADD.files.length && ADD.photoCol) {
-        var tok = await grist.docApi.getAccessToken({ readOnly: false });
-        var fd = new FormData();
-        ADD.files.forEach(function (f) { fd.append("upload", f.file, f.file.name); });
-        var resp = await fetch(tok.baseUrl + "/attachments?auth=" + encodeURIComponent(tok.token), { method: "POST", body: fd });
-        if (!resp.ok) { throw new Error("téléversement des photos impossible (code " + resp.status + ")"); }
-        var ids = await resp.json();
-        fields[ADD.photoCol] = ["L"].concat(ids);
+        try {
+          var ids = await uploadPhotos(ADD.files);
+          fields[ADD.photoCol] = ["L"].concat(ids);
+        } catch (upErr) {
+          var why = upErr && upErr.message ? upErr.message : String(upErr);
+          var go = await askWorn("Les photos n'ont pas pu être téléversées (" + why + "). Ajouter l'habit sans photo ?");
+          if (!go) { throw new Error("photos non téléversées (" + why + ")"); }
+        }
       }
       var res = await grist.docApi.applyUserActions([["AddRecord", HABITS_TABLE, null, fields]]);
       var nid = res && res.retValues ? res.retValues[0] : null;
