@@ -340,6 +340,7 @@
   .lb { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; padding: 8px; background: rgba(18, 18, 30, .94); cursor: zoom-out; }
   .lb img { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; border-radius: 8px; }
   .lb .lb-x { position: absolute; top: 8px; right: 8px; background: rgba(255, 255, 255, .85); color: #222; }
+  .lb .lb-badge { position: absolute; left: 12px; top: 12px; max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 4px 14px; border-radius: 999px; font-size: 12px; font-weight: 700; color: #1d2b3a; background: rgba(255, 255, 255, .9); }
   .lb .lb-cap { position: absolute; left: 12px; bottom: 12px; padding: 3px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; background: rgba(0, 0, 0, .7); color: #fff; }
 
   /* ---- Date déjà enregistrée : remplacer / ajouter ---- */
@@ -881,7 +882,7 @@
     try { LB.el.remove(); } catch (e) { /* déjà retiré */ }
     LB = null;
   }
-  function openLightbox(src, caption, colors, doc, onRemove) {
+  function openLightbox(src, caption, colors, doc, onRemove, badge) {
     if (!src) { return; }
     closeLightbox();
     doc = doc || document;
@@ -893,6 +894,11 @@
     var x = doc.createElement("button");
     x.type = "button"; x.className = "xbtn lb-x"; x.setAttribute("aria-label", "Fermer"); x.textContent = "\u00d7";
     lb.appendChild(x);
+    if (badge) {
+      var bd = doc.createElement("div");
+      bd.className = "lb-badge"; bd.textContent = badge;
+      lb.appendChild(bd);
+    }
     if (caption) {
       var cap = doc.createElement("div");
       cap.className = "lb-cap"; cap.textContent = caption;
@@ -1338,7 +1344,7 @@
               img.loading = "lazy"; img.decoding = "async"; img.alt = it.choice;
               img.src = tok.baseUrl + "/attachments/" + it.att + "/download?auth=" + tok.token;
               img.addEventListener("click", function () {
-                openLightbox(img.src, it.choice, CHOICE_COLORS[it.choice], null, function () { return removeFromSelection(it.id); });
+                openLightbox(img.src, it.choice, CHOICE_COLORS[it.choice], null, function () { return removeFromSelection(it.id); }, emplacementOf(it.id));
               });
               fig.appendChild(img);
             } else {
@@ -1593,7 +1599,9 @@
       rows.push(r);
     });
 
-    var C = { data: data, meta: meta, types: types, emps: emps, linkCol: linkCol, empCol: empCol, cols: cols, rows: rows,
+    var byId = {};
+    rows.forEach(function (r) { byId[r.id] = r; });
+    var C = { byId: byId, data: data, meta: meta, types: types, emps: emps, linkCol: linkCol, empCol: empCol, cols: cols, rows: rows,
               hasSelect: !!data.Select, hasRanger: !!data.A_ranger, table: null, emptyEl: null };
     var sig = cols.join(",") + "#" + JSON.stringify(rows.map(function (r) { return [r.id, r.att, r.cells, r.style, r.type]; }));
     var old = HB.cache;
@@ -1760,6 +1768,15 @@
     syncSelection();
   }
 
+  // Emplacement (texte) d'une ligne, d'après les données déjà chargées
+  function emplacementOf(id) {
+    var C = HB.cache;
+    if (!C || C.error || !C.byId) { return ""; }
+    var k = C.cols.indexOf("Emplacement");
+    var r = C.byId[id];
+    return (k >= 0 && r) ? r.cells[k] : "";
+  }
+
   // Recharge les données depuis Grist puis réapplique les filtres
   async function refreshHabits() {
     if (HB.busy) { HB.again = true; return; }
@@ -1767,6 +1784,7 @@
     try {
       await loadHabits();
       renderHabits();
+      mosAfterLoad();
     } catch (e) {
       habitsMessage("Liste indisponible : " + (e && e.message ? e.message : e));
     }
@@ -2908,17 +2926,21 @@
   }
 
   async function mosLoad() {
-    if (!MOS.meta) { await mosLoadMeta(); }
-    var meta = MOS.meta;
-    var raw = await grist.docApi.fetchTable(HABITS_TABLE);
-    var refs = {};
-    for (var a = 0; a < meta.length; a++) {
-      var c0 = meta[a];
-      if (c0.target && !refs[c0.target]) {
-        var t0 = await grist.docApi.fetchTable(c0.target);
-        refs[c0.target] = { t: t0, idx: new Map(t0.id.map(function (id, i) { return [id, i]; })) };
-      }
+    if (!MOS.meta) {
+      MOS.metaP = MOS.metaP || mosLoadMeta().catch(function (e) { MOS.metaP = null; throw e; });
+      await MOS.metaP;
     }
+    var meta = MOS.meta;
+    // données déjà chargées pour le tableau : pas de nouvelle lecture de Mes_habits
+    var cached = (HB.cache && !HB.cache.error) ? HB.cache.data : null;
+    var raw = cached || await grist.docApi.fetchTable(HABITS_TABLE);
+    MOS.dataRef = cached;
+    var refs = {}, targets = [];
+    meta.forEach(function (c) { if (c.target && targets.indexOf(c.target) === -1) { targets.push(c.target); } });
+    var tabs = await Promise.all(targets.map(function (n) { return fetchRef(n, false); }));
+    targets.forEach(function (n, k) {
+      refs[n] = { t: tabs[k], idx: new Map(tabs[k].id.map(function (id, i) { return [id, i]; })) };
+    });
     MOS.refOpts = {};
     meta.forEach(function (c) {
       if (c.target && c.type.indexOf("RefList:") !== 0) {
@@ -2947,14 +2969,31 @@
     });
   }
 
+  // Prépare les enregistrements (et l'index de recherche) en mémoire, sans attendre l'ouverture de la mosaïque
+  function mosEnsure() {
+    var C = HB.cache;
+    if (C && !C.error && C.data && MOS.dataRef === C.data && MOS.records.length) { return Promise.resolve(); }
+    if (!MOS.prep) {
+      MOS.prep = mosLoad().then(function () { mosBuildIndex(); })
+        .then(function () { MOS.prep = null; }, function (e) { MOS.prep = null; throw e; });
+    }
+    return MOS.prep;
+  }
+  // Appelé après chaque chargement du tableau : rafraîchit la mosaïque si elle est ouverte, sinon la prépare en arrière-plan
+  function mosAfterLoad() {
+    if (MOS.on) { mosRefresh(); return; }
+    clearTimeout(MOS.pt);
+    MOS.pt = setTimeout(function () { mosEnsure().catch(function () { /* sera repris à l'ouverture */ }); }, 150);
+  }
+
   async function mosRefresh() {
     if (!MOS.on) { return; }
     if (MOS.loading) { MOS.again = true; return; }
     MOS.loading = true;
     try {
-      if (!MOS.tok) { MOS.tok = await grist.docApi.getAccessToken({ readOnly: true }); }
-      await mosLoad();
-      mosBuildIndex();
+      if (!MOS.tok) { MOS.tok = await galleryToken(); }
+      await mosEnsure();
+      if (HB.cache && !HB.cache.error && MOS.dataRef !== HB.cache.data) { await mosEnsure(); }   // données rechargées entre-temps
       mosBuildTypes();
       mosApplyFilter(true);
       if (MOS.curRow !== null) {
@@ -3143,7 +3182,7 @@
   });
 
   // Se met à jour à chaque modification de la table (le contenu est relu via l'API)
-  grist.onRecords(function () { scheduleGallery(); scheduleHabits(); mosScheduleRefresh(); });
+  grist.onRecords(function () { scheduleGallery(); scheduleHabits(); });
 
 
   grist.onNewRecord(function () {
