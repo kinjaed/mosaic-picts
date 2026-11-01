@@ -172,16 +172,19 @@
   .g-btn.cam[aria-pressed=true] { color: #fff; background: var(--accent); border-color: var(--accent); }
 
   /* ---- Mosaïque de photos (dans le cadre LISTE DES HABITS) ---- */
-  .panel.habits.mosaic-on .hb-search, .panel.habits.mosaic-on .hb-size, .panel.habits.mosaic-on .sw, .panel.habits.mosaic-on #hbCount { display: none !important; }
+  .panel.habits.mosaic-on .g-head .hb-search, .panel.habits.mosaic-on .hb-size, .panel.habits.mosaic-on .sw, .panel.habits.mosaic-on #hbCount { display: none !important; }
   .panel.habits.mosaic-on #hbMax { margin-left: auto; }
   .panel.habits.mosaic-on .hb-main { display: none; }
   .ms-root { display: none; flex: 1; min-height: 0; flex-direction: column; }
   .panel.habits.mosaic-on .ms-root { display: flex; }
   .panel.habits.collapsed .ms-root { display: none; }
   .ms-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 7px 12px; }
-  .ms-bar .hb-search { flex: 0 1 260px; }
+  .ms-top { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px 14px; padding: 8px 12px 0; }
+  .ms-find { display: flex; flex-direction: column; gap: 6px; flex: 0 1 230px; margin-left: auto; min-width: 150px; }
+  .ms-find .hb-search { flex: none; width: 100%; }
+  .ms-find .g-btn { width: 100%; padding: 3px 10px; }
   .ms-bar input[type=range] { width: 140px; accent-color: var(--slider); }
-  .ms-types { display: flex; flex-wrap: wrap; gap: 2px; padding: 6px 12px 0; max-height: 96px; overflow-y: auto; }
+  .ms-types { display: flex; flex-wrap: wrap; flex: 1 1 260px; min-width: 0; gap: 2px; max-height: 96px; overflow-y: auto; }
   .ms-types:empty { display: none; }
   .ms-types button { padding: 4px 12px; font: inherit; font-size: 12px; color: var(--text); background: transparent; border: 1.5px solid transparent; border-radius: 999px; cursor: pointer; white-space: nowrap; }
   .ms-types button:hover { background: var(--surface); }
@@ -418,9 +421,14 @@
     <div id="hbBody" class="hb-body"></div>
   </div>
   <div id="mos" class="ms-root">
-    <div id="mTypes" class="ms-types" role="group" aria-label="Sélection rapide par type"></div>
+    <div class="ms-top">
+      <div id="mTypes" class="ms-types" role="group" aria-label="Sélection rapide par type"></div>
+      <div class="ms-find">
+        <button id="mShow" class="g-btn" type="button" disabled title="Fermer la mosaïque et sélectionner dans le tableau la ligne de la vignette sélectionnée">Afficher dans le tableau</button>
+        <input id="mQ" class="hb-search" type="search" placeholder="Rechercher dans toutes les colonnes…" autocomplete="off" aria-label="Rechercher dans la mosaïque">
+      </div>
+    </div>
     <div class="ms-bar">
-      <input id="mQ" class="hb-search" type="search" placeholder="Rechercher dans toutes les colonnes…" autocomplete="off" aria-label="Rechercher dans la mosaïque">
       <span id="mCount" class="g-count"></span>
       <input id="mSize" type="range" min="80" max="400" value="160" aria-label="Taille des vignettes">
     </div>
@@ -2709,6 +2717,8 @@
     if (!g) { return; }
     var tiles = g.querySelectorAll(".ms-tile");
     for (var i = 0; i < tiles.length; i++) { tiles[i].classList.toggle("sel", tiles[i].dataset.id === String(HB.selectedId)); }
+    var sb = $m("mShow");
+    if (sb) { sb.disabled = HB.selectedId === null || HB.selectedId === undefined; }
   }
 
   // ---- aperçu + édition ----
@@ -2917,11 +2927,29 @@
     panel.classList.toggle("mosaic-on", on);
     btn.setAttribute("aria-pressed", String(on));
     btn.title = on ? "Revenir au tableau" : "Afficher la mosaïque de photos";
-    if (on) { mosRefreshToken(); mosRefresh(); }
+    if (on) { mosRefreshToken(); mosRefresh(); mosMarkSel(); }
     else { mosCloseModal(); clearTimeout(MOS.tokTimer); }
   }
 
+  // « Afficher dans le tableau » : ferme la mosaïque et sélectionne la ligne de la vignette sélectionnée
+  async function showInTable() {
+    var id = HB.selectedId;
+    mosToggle(false);
+    if (id === null || id === undefined) { return; }
+    if (!document.querySelector('#hbBody tbody tr[data-id="' + id + '"]')) {
+      // la ligne est masquée par un filtre du tableau : on les retire pour la rendre visible
+      HB.typeSel = ""; HB.empSel = ""; HB.search = ""; HB.only = false; HB.rangerOnly = false;
+      $m("hbSearch").value = ""; $m("hbSel").checked = false; $m("hbRanger").checked = false;
+      try { localStorage.setItem("selectionPhoto.only", "0"); localStorage.setItem("selectionPhoto.ranger", "0"); } catch (e) { /* non mémorisé */ }
+      HB.sig = null;
+      await refreshHabits();
+      setTimeout(function () { markSelected(true); }, 450);
+    }
+    markSelected(true);
+  }
+
   (function mosInit() {
+    $m("mShow").addEventListener("click", showInTable);
     $m("hbMos").addEventListener("click", function () {
       if ($m("habits").classList.contains("collapsed")) { LAYOUT = null; applyLayout(); }
       mosToggle(!MOS.on);
