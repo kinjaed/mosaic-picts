@@ -131,6 +131,7 @@
   .tp .tp-n { flex: none; font-size: 12px; font-weight: 400; color: var(--muted); font-variant-numeric: tabular-nums; }
   .tp.on .tp-n { color: #2b86c5; font-weight: 600; }
   .tp.zero { opacity: .5; }
+  table.hb tbody tr[hidden], .hint[hidden] { display: none; }
   .tp-cap { padding: 2px 12px 4px; font-size: 10.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
   .hb-body { flex: 1; min-width: 0; min-height: 0; overflow: auto; }
   table.hb th.min, table.hb td.min { width: 1%; white-space: nowrap; text-align: center; }
@@ -1527,194 +1528,227 @@
     d.className = "hint"; d.textContent = text;
     body.appendChild(d);
     document.getElementById("hbCount").textContent = "";
-    HB.sig = null;
   }
 
+  /* Deux étapes pour que les filtres soient instantanés :
+     1) loadHabits()   : lit les tables dans Grist et construit le tableau (une seule fois par modification des données) ;
+     2) renderHabits() : applique les filtres (types, emplacements, recherche, switchs) sur ces données déjà en mémoire
+                         en masquant/affichant les lignes, sans aucun appel réseau. */
+  async function loadHabits() {
+    var meta = await habitsMeta();
+    if (!meta) { HB.cache = { error: "Table « " + HABITS_TABLE + " » introuvable." }; return; }
+    var data = await grist.docApi.fetchTable(HABITS_TABLE);
+    canonize(data, meta);
+    HB.valById = {}; HB.nbById = {};
+    if (choiceColumn && data[choiceColumn]) { data.id.forEach(function (id, i) { HB.valById[id] = data[choiceColumn][i]; }); }
+    if (data.nb) { data.id.forEach(function (id, i) { HB.nbById[id] = data.nb[i]; }); }
+    var types = await loadRefList("Type", "Vetement");
+    var emps = await loadRefList("Emplacements", "Emplacement");
+    var linkCol = typeLinkCol(meta);
+    var empCol = empLinkCol(meta);
+    var cols = HABIT_COLS.filter(function (c) { return data[c]; });
+    var refs = await habitsRefs(meta, linkCol ? cols.concat([linkCol]) : cols);
+    var nameToT = {}, nameToE = {};
+    (types || []).forEach(function (t) { nameToT[t.name] = String(t.id); });
+    (emps || []).forEach(function (e) { nameToE[e.name] = String(e.id); });
+
+    var rows = [];
+    data.id.forEach(function (id, i) {
+      if (data.Supprime && data.Supprime[i] === true) { return; }   // lignes supprimées : jamais affichées
+      var r = {
+        id: id, att: null, cells: [],
+        note: data.Note ? data.Note[i] : null,
+        nb: data.nb ? data.nb[i] : null,
+        type: linkCol ? cellText(linkCol, data[linkCol][i], meta, refs) : "",
+        style: data.Select ? rowStyle(i, data.Select[i], data, meta) : null,
+        selOn: data.Select ? !isEmptyVal(data.Select[i], meta.Select && meta.Select.type) : false,
+        rangerOn: data.A_ranger ? data.A_ranger[i] === true : false,
+        tIds: linkIds(data, meta, linkCol, nameToT, i),
+        eIds: linkIds(data, meta, empCol, nameToE, i)
+      };
+      cols.forEach(function (c) {
+        if (c === "Photo") { r.att = firstAttachment(data.Photo[i]); r.cells.push(""); }
+        else { r.cells.push(cellText(c, data[c][i], meta, refs)); }
+      });
+      r.title = [r.cells[cols.indexOf("Marque")], r.cells[cols.indexOf("Description")]].filter(Boolean).join(" – ");
+      r.hay = norm(r.cells.join(" "));   // texte de recherche (colonnes affichées)
+      rows.push(r);
+    });
+
+    var C = { meta: meta, types: types, emps: emps, linkCol: linkCol, empCol: empCol, cols: cols, rows: rows,
+              hasSelect: !!data.Select, hasRanger: !!data.A_ranger, table: null, emptyEl: null };
+    var sig = cols.join(",") + "#" + JSON.stringify(rows.map(function (r) { return [r.id, r.att, r.cells, r.style, r.type]; }));
+    var old = HB.cache;
+    if (old && !old.error && old.table && sig === HB.sig && old.rows.length === rows.length) {
+      // rien n'a changé d'affichable : on garde les lignes déjà construites
+      C.table = old.table; C.emptyEl = old.emptyEl;
+      rows.forEach(function (r, k) { r.tr = old.rows[k].tr; });
+    } else {
+      HB.sig = sig;
+      buildHabitsTable(C, await galleryToken());
+    }
+    HB.cache = C;
+  }
+
+  // Construit le tableau complet (toutes les lignes non supprimées) ; le filtrage ne fait ensuite que masquer des lignes
+  function buildHabitsTable(C, tok) {
+    var meta = C.meta, cols = C.cols;
+    var table = document.createElement("table");
+    table.className = "hb";
+    var trh = document.createElement("tr");
+    cols.forEach(function (c) {
+      var th = document.createElement("th");
+      th.textContent = (meta[c] && meta[c].label) || c;
+      if (MIN_COLS[c]) { th.className = "min"; }
+      trh.appendChild(th);
+    });
+    var thead = document.createElement("thead");
+    thead.appendChild(trh);
+    table.appendChild(thead);
+    var tbody = document.createElement("tbody");
+    C.rows.forEach(function (r) {
+      var tr = document.createElement("tr");
+      tr.setAttribute("data-id", r.id);
+      if (r.id === HB.selectedId) { tr.className = "sel"; }
+      tr.addEventListener("click", function () {
+        HB.selectedId = r.id;
+        markSelected(false);
+        syncSelection();
+      });
+      tr.addEventListener("dblclick", function (ev) {
+        if (ev.target.closest && ev.target.closest("select, input, button, label, img, textarea")) { return; }
+        openEdit(r.id);
+      });
+      cols.forEach(function (c, ci) {
+        var td = document.createElement("td");
+        var type = (meta[c] && meta[c].type) || "";
+        if (MIN_COLS[c]) { td.className = "min"; }
+        if (c === "Photo") {
+          td.className = "c";
+          if (r.att) {
+            var img = document.createElement("img");
+            img.className = "hb-th"; img.loading = "lazy"; img.decoding = "async"; img.alt = r.title || "Photo";
+            img.src = tok.baseUrl + "/attachments/" + r.att + "/download?auth=" + tok.token;
+            img.addEventListener("click", function () { openLightbox(img.src, r.title, null); });
+            td.appendChild(img);
+          }
+        } else if (c === "Note") {
+          noteEditor(td, r, meta.Note);
+        } else if (c === "nb") {
+          var num = document.createElement("span");
+          num.textContent = r.cells[ci];
+          td.appendChild(num);
+          var plus = document.createElement("button");
+          plus.type = "button"; plus.className = "plus"; plus.textContent = "+";
+          plus.title = "Marquer comme porté"; plus.setAttribute("aria-label", "Marquer comme porté");
+          plus.addEventListener("click", function (ev) { ev.stopPropagation(); wearOnce(r, num); });
+          td.appendChild(plus);
+        } else if (c === "A_ranger" && type === "Bool") {
+          var lab = document.createElement("label");
+          lab.className = "sw sm violet"; lab.title = "À ranger";
+          var cb = document.createElement("input");
+          cb.type = "checkbox"; cb.checked = r.cells[ci] !== "";
+          var trk = document.createElement("span"); trk.className = "track";
+          lab.appendChild(cb); lab.appendChild(trk);
+          lab.addEventListener("click", function (ev) { ev.stopPropagation(); });
+          cb.addEventListener("change", function () {
+            var want = cb.checked, f = {};
+            f[meta.A_ranger.colId] = want;
+            cb.disabled = true;
+            grist.docApi.applyUserActions([["UpdateRecord", HABITS_TABLE, r.id, f]])
+              .then(function () { cb.disabled = false; scheduleHabits(); })
+              .catch(function (err) {
+                cb.disabled = false; cb.checked = !want;
+                alert("Modification impossible : " + (err && err.message ? err.message : err));
+              });
+          });
+          td.appendChild(lab);
+        } else {
+          if (type === "Bool") { td.className = "c"; }
+          td.textContent = r.cells[ci];
+        }
+        if (r.style) {
+          if (r.style.fillColor) { td.style.backgroundColor = r.style.fillColor; }
+          if (r.style.textColor) { td.style.color = r.style.textColor; }
+          if (r.style.fontBold) { td.style.fontWeight = "700"; }
+        }
+        tr.appendChild(td);
+      });
+      r.tr = tr;
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    var h = document.createElement("div");
+    h.className = "hint"; h.hidden = true;
+    C.table = table; C.emptyEl = h;
+  }
+
+  // Applique les filtres sur les données en mémoire (instantané : aucun appel à Grist)
+  function renderHabits() {
+    var C = HB.cache;
+    if (!C) { return; }
+    if (C.error) { habitsMessage(C.error); return; }
+
+    // lignes de base : switchs « Sélectionnés » / « A ranger » et recherche
+    var words = norm(HB.search).split(/\s+/).filter(Boolean);
+    var base = C.rows.filter(function (r) {
+      if (HB.only && C.hasSelect && !r.selOn) { return false; }
+      if (HB.rangerOnly && C.hasRanger && !r.rangerOn) { return false; }
+      for (var w = 0; w < words.length; w++) { if (r.hay.indexOf(words[w]) === -1) { return false; } }
+      return true;
+    });
+
+    // nombre de lignes par type / emplacement (les comptes d'une liste tiennent compte de la sélection de l'autre)
+    var tCounts = {}, eCounts = {}, tTotal = 0, eTotal = 0;
+    (C.types || []).forEach(function (t) { tCounts[String(t.id)] = 0; });
+    (C.emps || []).forEach(function (e) { eCounts[String(e.id)] = 0; });
+    if (C.types && HB.typeSel !== "" && tCounts[HB.typeSel] === undefined) { HB.typeSel = ""; }
+    if (C.emps && HB.empSel !== "" && eCounts[HB.empSel] === undefined) { HB.empSel = ""; }
+    base.forEach(function (r) {
+      var okT = HB.typeSel === "" || r.tIds.indexOf(HB.typeSel) !== -1;
+      var okE = HB.empSel === "" || r.eIds.indexOf(HB.empSel) !== -1;
+      if (okE) { tTotal++; r.tIds.forEach(function (id) { if (tCounts[id] !== undefined) { tCounts[id]++; } }); }
+      if (okT) { eTotal++; r.eIds.forEach(function (id) { if (eCounts[id] !== undefined) { eCounts[id]++; } }); }
+    });
+    renderList("hbTypes", "Types", C.types, tCounts, tTotal, "typeSel", "typeSig", "Table « Type » (colonne Vetement) introuvable.");
+    renderList("hbEmps", "Emplacements", C.emps, eCounts, eTotal, "empSel", "empSig", "Table « Emplacements » (colonne Emplacement) introuvable.");
+
+    if (HB.only && !C.hasSelect) {
+      habitsMessage("Colonne « Select » introuvable dans " + HABITS_TABLE + ".");
+    } else if (HB.rangerOnly && !C.hasRanger) {
+      habitsMessage("Colonne « A_ranger » introuvable dans " + HABITS_TABLE + ".");
+    } else if (HB.typeSel !== "" && !C.linkCol) {
+      habitsMessage("Aucune colonne de " + HABITS_TABLE + " n'est liée à la table Type.");
+    } else if (HB.empSel !== "" && !C.empCol) {
+      habitsMessage("Aucune colonne de " + HABITS_TABLE + " n'est liée à la table Emplacements.");
+    } else {
+      var body = document.getElementById("hbBody");
+      if (body.firstChild !== C.table) {
+        body.innerHTML = "";
+        body.appendChild(C.table);
+        body.appendChild(C.emptyEl);
+      }
+      var vis = new Set(base.filter(function (r) {
+        return (HB.typeSel === "" || r.tIds.indexOf(HB.typeSel) !== -1) && (HB.empSel === "" || r.eIds.indexOf(HB.empSel) !== -1);
+      }));
+      C.rows.forEach(function (r) {
+        var on = vis.has(r);
+        if (r.tr.hidden === on) { r.tr.hidden = !on; }
+      });
+      C.emptyEl.hidden = vis.size > 0;
+      C.emptyEl.textContent = HB.only ? "Aucune ligne sélectionnée." : "Aucune ligne.";
+      document.getElementById("hbCount").textContent = vis.size + " ligne" + (vis.size > 1 ? "s" : "");
+    }
+    syncSelection();
+  }
+
+  // Recharge les données depuis Grist puis réapplique les filtres
   async function refreshHabits() {
     if (HB.busy) { HB.again = true; return; }
     HB.busy = true;
     try {
-      var meta = await habitsMeta();
-      if (!meta) {
-        habitsMessage("Table « " + HABITS_TABLE + " » introuvable.");
-      } else {
-        var data = await grist.docApi.fetchTable(HABITS_TABLE);
-        canonize(data, meta);
-        HB.valById = {}; HB.nbById = {};
-        if (choiceColumn && data[choiceColumn]) { data.id.forEach(function (id, i) { HB.valById[id] = data[choiceColumn][i]; }); }
-        if (data.nb) { data.id.forEach(function (id, i) { HB.nbById[id] = data.nb[i]; }); }
-        var types = await loadRefList("Type", "Vetement");
-        var emps = await loadRefList("Emplacements", "Emplacement");
-        var linkCol = typeLinkCol(meta);
-        var empCol = empLinkCol(meta);
-        var cols = HABIT_COLS.filter(function (c) { return data[c]; });
-        var refs = await habitsRefs(meta, linkCol ? cols.concat([linkCol]) : cols);
-
-        // lignes de base : hors supprimées (Supprime = true) et, si demandé, uniquement les sélectionnées
-        var base = [];
-        data.id.forEach(function (id, i) {
-          if (data.Supprime && data.Supprime[i] === true) { return; }
-          if (HB.only && data.Select && isEmptyVal(data.Select[i], meta.Select && meta.Select.type)) { return; }
-          if (HB.rangerOnly && data.A_ranger && data.A_ranger[i] !== true) { return; }
-          base.push(i);
-        });
-        // recherche : tous les mots saisis doivent figurer dans le texte des colonnes affichées
-        var words = norm(HB.search).split(/\s+/).filter(Boolean);
-        if (words.length) {
-          base = base.filter(function (i) {
-            var hay = norm(cols.filter(function (c) { return c !== "Photo"; })
-              .map(function (c) { return cellText(c, data[c][i], meta, refs); }).join(" "));
-            return words.every(function (w) { return hay.indexOf(w) !== -1; });
-          });
-        }
-
-        // type(s) et emplacement(s) de chaque ligne ; nombre de lignes par valeur
-        // (les comptes d'une liste tiennent compte de la sélection de l'autre liste)
-        var tIds = {}, eIds = {}, nameToT = {}, nameToE = {}, tCounts = {}, eCounts = {}, tTotal = 0, eTotal = 0;
-        (types || []).forEach(function (t) { nameToT[t.name] = String(t.id); tCounts[String(t.id)] = 0; });
-        (emps || []).forEach(function (e) { nameToE[e.name] = String(e.id); eCounts[String(e.id)] = 0; });
-        if (types && HB.typeSel !== "" && tCounts[HB.typeSel] === undefined) { HB.typeSel = ""; }
-        if (emps && HB.empSel !== "" && eCounts[HB.empSel] === undefined) { HB.empSel = ""; }
-        base.forEach(function (i) {
-          tIds[i] = linkIds(data, meta, linkCol, nameToT, i);
-          eIds[i] = linkIds(data, meta, empCol, nameToE, i);
-          var okT = HB.typeSel === "" || tIds[i].indexOf(HB.typeSel) !== -1;
-          var okE = HB.empSel === "" || eIds[i].indexOf(HB.empSel) !== -1;
-          if (okE) { tTotal++; tIds[i].forEach(function (id) { if (tCounts[id] !== undefined) { tCounts[id]++; } }); }
-          if (okT) { eTotal++; eIds[i].forEach(function (id) { if (eCounts[id] !== undefined) { eCounts[id]++; } }); }
-        });
-        renderList("hbTypes", "Types", types, tCounts, tTotal, "typeSel", "typeSig", "Table « Type » (colonne Vetement) introuvable.");
-        renderList("hbEmps", "Emplacements", emps, eCounts, eTotal, "empSel", "empSig", "Table « Emplacements » (colonne Emplacement) introuvable.");
-
-        if (HB.only && !data.Select) {
-          habitsMessage("Colonne « Select » introuvable dans " + HABITS_TABLE + ".");
-        } else if (HB.rangerOnly && !data.A_ranger) {
-          habitsMessage("Colonne « A_ranger » introuvable dans " + HABITS_TABLE + ".");
-        } else if (HB.typeSel !== "" && !linkCol) {
-          habitsMessage("Aucune colonne de " + HABITS_TABLE + " n'est liée à la table Type.");
-        } else if (HB.empSel !== "" && !empCol) {
-          habitsMessage("Aucune colonne de " + HABITS_TABLE + " n'est liée à la table Emplacements.");
-        } else {
-          var rows = [];
-          base.forEach(function (i) {
-            if (HB.typeSel !== "" && tIds[i].indexOf(HB.typeSel) === -1) { return; }
-            if (HB.empSel !== "" && eIds[i].indexOf(HB.empSel) === -1) { return; }
-            var r = {
-              id: data.id[i], att: null, cells: [],
-              note: data.Note ? data.Note[i] : null,
-              nb: data.nb ? data.nb[i] : null,
-              type: linkCol ? cellText(linkCol, data[linkCol][i], meta, refs) : "",
-              style: data.Select ? rowStyle(i, data.Select[i], data, meta) : null
-            };
-            cols.forEach(function (c) {
-              if (c === "Photo") { r.att = firstAttachment(data.Photo[i]); r.cells.push(""); }
-              else { r.cells.push(cellText(c, data[c][i], meta, refs)); }
-            });
-            r.title = [r.cells[cols.indexOf("Marque")], r.cells[cols.indexOf("Description")]].filter(Boolean).join(" – ");
-            rows.push(r);
-          });
-          var sig = cols.join(",") + "#" + JSON.stringify(rows.map(function (r) { return [r.id, r.att, r.cells, r.style, r.type]; }));
-          if (sig !== HB.sig) {
-            HB.sig = sig;
-            var tok = await galleryToken();
-            var body = document.getElementById("hbBody");
-            body.innerHTML = "";
-            var table = document.createElement("table");
-            table.className = "hb";
-            var trh = document.createElement("tr");
-            cols.forEach(function (c) {
-              var th = document.createElement("th");
-              th.textContent = (meta[c] && meta[c].label) || c;
-              if (MIN_COLS[c]) { th.className = "min"; }
-              trh.appendChild(th);
-            });
-            var thead = document.createElement("thead");
-            thead.appendChild(trh);
-            table.appendChild(thead);
-            var tbody = document.createElement("tbody");
-            rows.forEach(function (r) {
-              var tr = document.createElement("tr");
-              tr.setAttribute("data-id", r.id);
-              if (r.id === HB.selectedId) { tr.className = "sel"; }
-              tr.addEventListener("click", function () {
-                HB.selectedId = r.id;
-                markSelected(false);
-                syncSelection();
-              });
-              tr.addEventListener("dblclick", function (ev) {
-                if (ev.target.closest && ev.target.closest("select, input, button, label, img, textarea")) { return; }
-                openEdit(r.id);
-              });
-              cols.forEach(function (c, ci) {
-                var td = document.createElement("td");
-                var type = (meta[c] && meta[c].type) || "";
-                if (MIN_COLS[c]) { td.className = "min"; }
-                if (c === "Photo") {
-                  td.className = "c";
-                  if (r.att) {
-                    var img = document.createElement("img");
-                    img.className = "hb-th"; img.loading = "lazy"; img.decoding = "async"; img.alt = r.title || "Photo";
-                    img.src = tok.baseUrl + "/attachments/" + r.att + "/download?auth=" + tok.token;
-                    img.addEventListener("click", function () { openLightbox(img.src, r.title, null); });
-                    td.appendChild(img);
-                  }
-                } else if (c === "Note") {
-                  noteEditor(td, r, meta.Note);
-                } else if (c === "nb") {
-                  var num = document.createElement("span");
-                  num.textContent = r.cells[ci];
-                  td.appendChild(num);
-                  var plus = document.createElement("button");
-                  plus.type = "button"; plus.className = "plus"; plus.textContent = "+";
-                  plus.title = "Marquer comme porté"; plus.setAttribute("aria-label", "Marquer comme porté");
-                  plus.addEventListener("click", function (ev) { ev.stopPropagation(); wearOnce(r, num); });
-                  td.appendChild(plus);
-                } else if (c === "A_ranger" && type === "Bool") {
-                  var lab = document.createElement("label");
-                  lab.className = "sw sm violet"; lab.title = "À ranger";
-                  var cb = document.createElement("input");
-                  cb.type = "checkbox"; cb.checked = r.cells[ci] !== "";
-                  var trk = document.createElement("span"); trk.className = "track";
-                  lab.appendChild(cb); lab.appendChild(trk);
-                  lab.addEventListener("click", function (ev) { ev.stopPropagation(); });
-                  cb.addEventListener("change", function () {
-                    var want = cb.checked, f = {};
-                    f[meta.A_ranger.colId] = want;
-                    cb.disabled = true;
-                    grist.docApi.applyUserActions([["UpdateRecord", HABITS_TABLE, r.id, f]])
-                      .then(function () { cb.disabled = false; scheduleHabits(); })
-                      .catch(function (err) {
-                        cb.disabled = false; cb.checked = !want;
-                        alert("Modification impossible : " + (err && err.message ? err.message : err));
-                      });
-                  });
-                  td.appendChild(lab);
-                } else {
-                  if (type === "Bool") { td.className = "c"; }
-                  td.textContent = r.cells[ci];
-                }
-                if (r.style) {
-                  if (r.style.fillColor) { td.style.backgroundColor = r.style.fillColor; }
-                  if (r.style.textColor) { td.style.color = r.style.textColor; }
-                  if (r.style.fontBold) { td.style.fontWeight = "700"; }
-                }
-                tr.appendChild(td);
-              });
-              tbody.appendChild(tr);
-            });
-            table.appendChild(tbody);
-            body.appendChild(table);
-            if (!rows.length) {
-              var h = document.createElement("div");
-              h.className = "hint";
-              h.textContent = HB.only ? "Aucune ligne sélectionnée." : "Aucune ligne.";
-              body.appendChild(h);
-            }
-            document.getElementById("hbCount").textContent = rows.length + " ligne" + (rows.length > 1 ? "s" : "");
-          }
-        }
-      }
-      syncSelection();
+      await loadHabits();
+      renderHabits();
     } catch (e) {
       habitsMessage("Liste indisponible : " + (e && e.message ? e.message : e));
     }
@@ -1892,8 +1926,7 @@
       b.appendChild(l); b.appendChild(c);
       b.addEventListener("click", function () {
         HB[selKey] = id;
-        HB.sig = null;
-        refreshHabits();
+        renderHabits();
       });
       box.appendChild(b);
     }
@@ -2941,9 +2974,7 @@
       HB.typeSel = ""; HB.empSel = ""; HB.search = ""; HB.only = false; HB.rangerOnly = false;
       $m("hbSearch").value = ""; $m("hbSel").checked = false; $m("hbRanger").checked = false;
       try { localStorage.setItem("selectionPhoto.only", "0"); localStorage.setItem("selectionPhoto.ranger", "0"); } catch (e) { /* non mémorisé */ }
-      HB.sig = null;
-      await refreshHabits();
-      setTimeout(function () { markSelected(true); }, 450);
+      renderHabits();
     }
     markSelected(true);
   }
@@ -3040,18 +3071,17 @@
     HB.only = ev.target.checked;
     if (HB.only) { HB.typeSel = ""; HB.empSel = ""; }   // « Sélectionnés » : retour automatique à « TOUS » (types et emplacements)
     try { localStorage.setItem("selectionPhoto.only", HB.only ? "1" : "0"); } catch (e) { /* non mémorisé */ }
-    HB.sig = null;
-    refreshHabits();
+    renderHabits();
   });
 
   (function () {
     var box = document.getElementById("hbSearch"), tm = null;
     box.addEventListener("input", function () {
       clearTimeout(tm);
-      tm = setTimeout(function () { HB.search = box.value; HB.sig = null; refreshHabits(); }, 200);
+      tm = setTimeout(function () { HB.search = box.value; renderHabits(); }, 120);
     });
     box.addEventListener("keydown", function (ev) {
-      if (ev.key === "Escape" && box.value) { ev.stopPropagation(); box.value = ""; HB.search = ""; HB.sig = null; refreshHabits(); }
+      if (ev.key === "Escape" && box.value) { ev.stopPropagation(); box.value = ""; HB.search = ""; renderHabits(); }
     });
   })();
   try { HB.rangerOnly = localStorage.getItem("selectionPhoto.ranger") === "1"; } catch (e) { /* valeur par défaut */ }
@@ -3059,8 +3089,7 @@
   document.getElementById("hbRanger").addEventListener("change", function (ev) {
     HB.rangerOnly = ev.target.checked;
     try { localStorage.setItem("selectionPhoto.ranger", HB.rangerOnly ? "1" : "0"); } catch (e) { /* non mémorisé */ }
-    HB.sig = null;
-    refreshHabits();
+    renderHabits();
   });
 
   /* -----------------------------------------------------------
