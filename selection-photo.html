@@ -2987,7 +2987,8 @@
     var id = HB.selectedId;
     mosToggle(false);
     if (id === null || id === undefined) { return; }
-    if (!document.querySelector('#hbBody tbody tr[data-id="' + id + '"]')) {
+    var row = document.querySelector('#hbBody tbody tr[data-id="' + id + '"]');
+    if (!row || row.hidden) {   // depuis l'optimisation, les lignes filtrées restent dans le DOM mais sont masquées
       // la ligne est masquée par un filtre du tableau : on les retire pour la rendre visible
       HB.typeSel = ""; HB.empSel = ""; HB.search = ""; HB.only = false; HB.rangerOnly = false;
       $m("hbSearch").value = ""; $m("hbSel").checked = false; $m("hbRanger").checked = false;
