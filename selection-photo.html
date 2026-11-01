@@ -1464,6 +1464,17 @@
     });
   }
 
+  // Tables de référence (Type, Marques, Taille…) : mises en cache pour ne pas les relire à chaque ouverture de formulaire.
+  // fresh = true force une relecture (utilisé lors du chargement des données du tableau).
+  var REFC = {};
+  async function fetchRef(name, fresh) {
+    var c = REFC[name];
+    if (!fresh && c) { return c.t; }
+    var t = await grist.docApi.fetchTable(name);
+    REFC[name] = { t: t, at: Date.now() };
+    return t;
+  }
+
   // Charge les tables référencées (colonnes Ref / RefList) pour afficher leur texte plutôt que l'ID
   async function habitsRefs(meta, cols) {
     var refs = {};
@@ -1472,7 +1483,7 @@
       if (!m || !/^Ref(List)?:/.test(m.type)) { continue; }
       var tbl = m.type.split(":")[1];
       try {
-        var t = await grist.docApi.fetchTable(tbl);
+        var t = await fetchRef(tbl, false);
         var map = {};
         t.id.forEach(function (id, n) { map[id] = m.visible && t[m.visible] ? t[m.visible][n] : id; });
         refs[cols[i]] = map;
@@ -1537,7 +1548,14 @@
   async function loadHabits() {
     var meta = await habitsMeta();
     if (!meta) { HB.cache = { error: "Table « " + HABITS_TABLE + " » introuvable." }; return; }
-    var data = await grist.docApi.fetchTable(HABITS_TABLE);
+    var need = ["Type", "Emplacements"];
+    Object.keys(meta).forEach(function (k) {
+      var mm = /^Ref(?:List)?:(\w+)$/.exec(meta[k].type);
+      if (mm && need.indexOf(mm[1]) === -1) { need.push(mm[1]); }
+    });
+    var fetched = await Promise.all([grist.docApi.fetchTable(HABITS_TABLE)].concat(
+      need.map(function (n) { return fetchRef(n, true).catch(function () { return null; }); })));
+    var data = fetched[0];
     canonize(data, meta);
     HB.valById = {}; HB.nbById = {};
     if (choiceColumn && data[choiceColumn]) { data.id.forEach(function (id, i) { HB.valById[id] = data[choiceColumn][i]; }); }
@@ -1575,7 +1593,7 @@
       rows.push(r);
     });
 
-    var C = { meta: meta, types: types, emps: emps, linkCol: linkCol, empCol: empCol, cols: cols, rows: rows,
+    var C = { data: data, meta: meta, types: types, emps: emps, linkCol: linkCol, empCol: empCol, cols: cols, rows: rows,
               hasSelect: !!data.Select, hasRanger: !!data.A_ranger, table: null, emptyEl: null };
     var sig = cols.join(",") + "#" + JSON.stringify(rows.map(function (r) { return [r.id, r.att, r.cells, r.style, r.type]; }));
     var old = HB.cache;
@@ -1878,7 +1896,7 @@
      de référence (ordre alphabétique) avec le nombre de lignes de chacune. Un clic filtre le tableau. */
   async function loadRefList(table, column) {
     try {
-      var t = await grist.docApi.fetchTable(table);
+      var t = await fetchRef(table, false);
       var key = findKey(t, column);
       if (!key) { return null; }
       var list = [];
@@ -1985,7 +2003,7 @@
   async function refOptions(m) {
     var out = { opts: [], t: null };
     try {
-      var t = await grist.docApi.fetchTable(m.type.split(":")[1]);
+      var t = await fetchRef(m.type.split(":")[1], false);
       out.t = t;
       t.id.forEach(function (id, n) {
         var v = m.visible && t[m.visible] ? t[m.visible][n] : id;
@@ -2093,6 +2111,7 @@
       return;
     }
     var nid = res && res.retValues ? res.retValues[0] : null;
+    delete REFC[tbl];
     if (c.addOption && typeof nid === "number") { c.addOption(nid, name); }
     else if (c.setValue) { c.setValue(name); }
   }
@@ -2326,9 +2345,8 @@
     var grid = document.getElementById("addGrid");
     grid.innerHTML = "";
     ADD.ctrls = [];
-    for (var i = 0; i < fields.length; i++) {
-      ADD.ctrls.push({ m: fields[i], c: await makeControl(fields[i]) });
-    }
+    var made = await Promise.all(fields.map(function (fm) { return makeControl(fm); }));
+    made.forEach(function (c, i) { ADD.ctrls.push({ m: fields[i], c: c }); });
     function labelFor(x) {
       var lab = addEl("label", "", x.m.label || x.m.colId);
       if (x.c.tall) { lab.className = "tall"; }
@@ -2461,7 +2479,7 @@
     try {
       var meta = await habitsMeta();
       if (!meta) { return; }
-      var data = await grist.docApi.fetchTable(HABITS_TABLE);
+      var data = (HB.cache && HB.cache.data) || await grist.docApi.fetchTable(HABITS_TABLE);
       var idx = data.id.indexOf(id);
       if (idx < 0) { return; }
       ADD.mode = "edit"; ADD.rowId = id;
