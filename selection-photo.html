@@ -168,6 +168,64 @@
   .g-btn.save:hover:not(:disabled) { background: var(--save); }
   .g-btn.hist:hover:not(:disabled) { background: var(--hist); }
   .g-btn:disabled { opacity: .5; cursor: default; }
+  .g-btn.cam { display: inline-flex; align-items: center; padding: 2px 8px; }
+  .g-btn.cam[aria-pressed=true] { color: #fff; background: var(--accent); border-color: var(--accent); }
+
+  /* ---- Mosaïque de photos (dans le cadre LISTE DES HABITS) ---- */
+  .panel.habits.mosaic-on .hb-search, .panel.habits.mosaic-on .hb-size, .panel.habits.mosaic-on .sw, .panel.habits.mosaic-on #hbCount { display: none !important; }
+  .panel.habits.mosaic-on #hbMax { margin-left: auto; }
+  .panel.habits.mosaic-on .hb-main { display: none; }
+  .ms-root { display: none; flex: 1; min-height: 0; flex-direction: column; }
+  .panel.habits.mosaic-on .ms-root { display: flex; }
+  .panel.habits.collapsed .ms-root { display: none; }
+  .ms-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 7px 12px; }
+  .ms-bar .hb-search { flex: 0 1 260px; }
+  .ms-bar input[type=range] { width: 140px; accent-color: var(--slider); }
+  .ms-types { display: flex; flex-wrap: wrap; gap: 2px; padding: 6px 12px 0; max-height: 96px; overflow-y: auto; }
+  .ms-types:empty { display: none; }
+  .ms-types button { padding: 4px 12px; font: inherit; font-size: 12px; color: var(--text); background: transparent; border: 1.5px solid transparent; border-radius: 999px; cursor: pointer; white-space: nowrap; }
+  .ms-types button:hover { background: var(--surface); }
+  .ms-types button[aria-pressed=true] { font-weight: 700; background: rgba(56, 152, 214, .16); border-color: #2b86c5; }
+  .ms-main { flex: 1; min-height: 0; overflow: auto; padding: 4px 12px 12px; }
+  .ms-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--ms-size, 160px), 1fr)); gap: 10px; }
+  .ms-tile { display: flex; flex-direction: column; padding: 0; text-align: left; font: inherit; color: inherit; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; cursor: pointer; }
+  .ms-tile:hover { border-color: var(--accent); }
+  .ms-tile.sel { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+  .ms-tile .ph { width: 100%; aspect-ratio: 1 / 1; overflow: hidden; background: var(--border); }
+  .ms-tile img { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .ms-tile .cap { padding: 6px 8px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ms-empty { padding: 40px; text-align: center; color: var(--muted); }
+  .ms-modal { position: fixed; inset: 0; z-index: 45; display: none; background: rgba(0, 0, 0, .78); }
+  .ms-modal.on { display: flex; }
+  .ms-box { margin: auto; width: min(1100px, 96vw); height: min(760px, 94vh); display: flex; overflow: hidden; color: var(--text); background: var(--bg); border-radius: 14px; }
+  .ms-view { position: relative; flex: 1 1 60%; min-width: 0; display: flex; flex-direction: column; background: #0c0f0e; }
+  .ms-stage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 8px; overflow: hidden; touch-action: none; cursor: zoom-in; }
+  .ms-stage img { width: 100%; height: 100%; object-fit: contain; user-select: none; -webkit-user-drag: none; will-change: transform; }
+  .ms-zoom { position: absolute; top: 8px; right: 8px; z-index: 2; display: flex; gap: 6px; }
+  .ms-zoom button { min-width: 34px; height: 34px; padding: 0 8px; font-size: 16px; color: #fff; background: rgba(0, 0, 0, .55); border: 0; border-radius: 8px; cursor: pointer; }
+  .ms-zoom button:hover { background: rgba(0, 0, 0, .8); }
+  .ms-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 36px; height: 56px; font-size: 22px; color: #fff; background: rgba(0, 0, 0, .5); border: 0; border-radius: 8px; cursor: pointer; }
+  #mPrev { left: 8px; } #mNext { right: 8px; }
+  .ms-strip { display: flex; gap: 6px; padding: 6px; overflow-x: auto; }
+  .ms-strip img { height: 48px; border-radius: 6px; cursor: pointer; opacity: .6; }
+  .ms-strip img.cur { opacity: 1; outline: 2px solid var(--accent); }
+  .ms-side { flex: 0 0 320px; max-width: 42%; display: flex; flex-direction: column; border-left: 1px solid var(--border); }
+  .ms-side h2 { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0; padding: 12px 14px; font-size: 15px; border-bottom: 1px solid var(--border); }
+  .ms-fields { flex: 1; min-height: 0; overflow: auto; padding: 10px 14px; }
+  .ms-foot { display: flex; justify-content: flex-end; padding: 10px 14px; border-top: 1px solid var(--border); background: var(--surface); }
+  .ms-f { margin-bottom: 10px; }
+  .ms-f label { display: block; margin-bottom: 2px; font-size: 12px; color: var(--muted); }
+  .ms-f input[type=text], .ms-f input[type=number], .ms-f textarea, .ms-f select {
+    box-sizing: border-box; width: 100%; font: inherit; padding: 6px 10px; color: var(--text); background: var(--surface);
+    border: 1px solid var(--border); border-radius: 10px; color-scheme: light dark;
+  }
+  .ms-f textarea { resize: vertical; min-height: 36px; }
+  .ms-f .ro { padding: 6px 10px; color: var(--muted); background: var(--surface); border-radius: 10px; word-break: break-word; }
+  .ms-f.saved input, .ms-f.saved textarea, .ms-f.saved select { border-color: var(--accent); }
+  @media (max-width: 700px) {
+    .ms-box { flex-direction: column; }
+    .ms-side { flex: 0 0 45%; max-width: none; border-left: 0; border-top: 1px solid var(--border); }
+  }
   .panel.gallery .g-head { flex-wrap: wrap; row-gap: 4px; }
 
   /* ---- Formulaire « Ajouter un habit » ---- */
@@ -338,6 +396,9 @@
       <span id="hbCount" class="g-count"></span>
     </div>
     <input id="hbSearch" class="hb-search" type="search" placeholder="Rechercher…" aria-label="Rechercher dans le tableau" title="Filtre les lignes contenant le texte (toutes les colonnes)" autocomplete="off">
+    <button id="hbMos" class="g-btn cam" type="button" aria-pressed="false" title="Afficher la mosaïque de photos" aria-label="Mosaïque de photos">
+      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg>
+    </button>
     <input id="hbSize" class="hb-size" type="range" min="30" max="200" value="56" aria-label="Taille des photos du tableau" title="Taille des photos du tableau">
     <label class="sw hb-right" title="Afficher uniquement les lignes dont la colonne Select n'est pas vide">
       <span>Sélectionnés</span>
@@ -355,6 +416,15 @@
     <aside id="hbTypes" class="hb-types" aria-label="Types de vêtements"></aside>
     <aside id="hbEmps" class="hb-types" aria-label="Emplacements"></aside>
     <div id="hbBody" class="hb-body"></div>
+  </div>
+  <div id="mos" class="ms-root">
+    <div id="mTypes" class="ms-types" role="group" aria-label="Sélection rapide par type"></div>
+    <div class="ms-bar">
+      <input id="mQ" class="hb-search" type="search" placeholder="Rechercher dans toutes les colonnes…" autocomplete="off" aria-label="Rechercher dans la mosaïque">
+      <span id="mCount" class="g-count"></span>
+      <input id="mSize" type="range" min="80" max="400" value="160" aria-label="Taille des vignettes">
+    </div>
+    <div id="mMain" class="ms-main"><div id="mGrid" class="ms-grid"></div><div id="mMore"></div></div>
   </div>
 </section>
 </div>
@@ -411,6 +481,27 @@
     <div class="dup-btns">
       <button id="brandNo" class="btn ghost" type="button">Annuler</button>
       <button id="brandYes" class="btn primary" type="button">Ajouter</button>
+    </div>
+  </div>
+</div>
+
+<div id="mModal" class="ms-modal" role="dialog" aria-modal="true">
+  <div class="ms-box">
+    <div class="ms-view">
+      <div class="ms-stage" id="mStage"><img id="mBig" alt=""></div>
+      <div class="ms-zoom">
+        <button id="mZout" type="button" aria-label="Réduire" title="Réduire">−</button>
+        <button id="mZfit" type="button" title="Adapter à l'espace">Adapter</button>
+        <button id="mZin" type="button" aria-label="Agrandir" title="Agrandir">+</button>
+      </div>
+      <button class="ms-nav" id="mPrev" type="button" aria-label="Précédent">‹</button>
+      <button class="ms-nav" id="mNext" type="button" aria-label="Suivant">›</button>
+      <div class="ms-strip" id="mStrip"></div>
+    </div>
+    <div class="ms-side">
+      <h2><span id="mTitle"></span><button class="xbtn" id="mClose" type="button" aria-label="Fermer">×</button></h2>
+      <div id="mFields" class="ms-fields"></div>
+      <div class="ms-foot"><button id="mClose2" class="btn primary" type="button">Fermer</button></div>
     </div>
   </div>
 </div>
@@ -1641,6 +1732,7 @@
       rows[i].classList.toggle("sel", on);
       if (on && scroll && rows[i].scrollIntoView) { rows[i].scrollIntoView({ block: "nearest" }); }
     }
+    mosMarkSel();
   }
 
   // Colonne Note modifiable : liste déroulante des valeurs du choix unique
@@ -2496,6 +2588,389 @@
     if (ADD.files.length) { ADD.cur = (ADD.cur + 1) % ADD.files.length; renderViewer(); }
   });
 
+  /* -----------------------------------------------------------
+     Mosaïque de photos (ancien widget « grist-mosaique ») intégrée :
+     - un clic sur une vignette sélectionne la ligne correspondante du tableau ;
+     - un double clic ouvre l'aperçu (zoom, navigation, édition des champs).
+     ----------------------------------------------------------- */
+  var MOS = {
+    on: false, records: [], index: [], filtered: [], shown: 0, tok: null, tokTimer: null, curRow: null, curImg: 0,
+    hideCol: null, typeCol: null, typeSel: "", choiceOpts: {}, refOpts: {}, meta: null, photoCol: null, legCols: [],
+    hiddenCols: new Set(), roCols: new Set(), colType: {}, loading: false, again: false, timer: null, rt: null,
+    Z: { z: 1, x: 0, y: 0 }, drag: null
+  };
+  var MOS_PAGE = 120;
+  var MOS_FORCE_RO = ["type", "marque"];                 // colonnes en lecture seule dans l'aperçu
+  var MOS_VIEW_HIDDEN = ["cat_taille", "select", "supprime"];   // colonnes non affichées dans l'aperçu (restent cherchables)
+  var $m = function (id) { return document.getElementById(id); };
+
+  var mosAttIds = function (v) { return Array.isArray(v) ? v.filter(function (x) { return typeof x === "number"; }) : []; };
+  var mosFmt = function (v) {
+    return v instanceof Date ? v.toLocaleString("fr-FR")
+      : Array.isArray(v) ? v.filter(function (x) { return x !== "L"; }).join(", ")
+      : (v && typeof v === "object") ? JSON.stringify(v) : (v === null || v === undefined ? "" : v);
+  };
+  var mosUrl = function (id) { return MOS.tok ? MOS.tok.baseUrl + "/attachments/" + id + "/download?auth=" + MOS.tok.token : ""; };
+  var mosHidden = function (k) { return k === "id" || k === "__raw" || k === MOS.photoCol || MOS.hiddenCols.has(k); };
+  var mosVisible = function (r) { return mosAttIds(r[MOS.photoCol]).length > 0 && !(MOS.hideCol && r[MOS.hideCol] === true); };
+  function mosLegend(r) {
+    return MOS.legCols.map(function (c) { return r[c]; })
+      .filter(function (v) { return v !== null && v !== undefined && v !== ""; }).map(mosFmt).join(" – ");
+  }
+
+  async function mosRefreshToken() {
+    if (!MOS.on) { return; }
+    try {
+      MOS.tok = await grist.docApi.getAccessToken({ readOnly: true });
+      document.querySelectorAll("#mos img[data-att], #mModal img[data-att]").forEach(function (i) { if (!i.complete) { i.src = mosUrl(i.dataset.att); } });
+      clearTimeout(MOS.tokTimer);
+      MOS.tokTimer = setTimeout(mosRefreshToken, Math.max(30000, (MOS.tok.ttlMsecs || 300000) - 60000));
+    } catch (e) { MOS.tokTimer = setTimeout(mosRefreshToken, 10000); }
+  }
+
+  // ---- index de recherche, filtre, types ----
+  function mosBuildIndex() {
+    MOS.index = MOS.records.map(function (r) {
+      var parts = [];
+      Object.keys(r).forEach(function (k) {
+        if (mosHidden(k)) { return; }
+        try { parts.push(mosFmt(r[k])); } catch (e) { parts.push(String(r[k])); }
+      });
+      return norm(parts.join(" "));
+    });
+  }
+
+  function mosApplyFilter(keep) {
+    var main = $m("mMain"), grid = $m("mGrid");
+    var st = keep ? main.scrollTop : 0;
+    var terms = norm($m("mQ").value).split(/\s+/).filter(Boolean);
+    MOS.filtered = [];
+    MOS.records.forEach(function (r, i) {
+      if (!mosVisible(r)) { return; }
+      if (MOS.typeSel && String(MOS.typeCol ? (r[MOS.typeCol] === null || r[MOS.typeCol] === undefined ? "" : r[MOS.typeCol]) : "") !== MOS.typeSel) { return; }
+      if (terms.every(function (t) { return MOS.index[i].indexOf(t) !== -1; })) { MOS.filtered.push(r); }
+    });
+    var total = MOS.records.filter(mosVisible).length;
+    $m("mCount").textContent = MOS.filtered.length + " photo" + (MOS.filtered.length > 1 ? "s" : "") + " sur " + total;
+    grid.innerHTML = ""; MOS.shown = 0;
+    if (!MOS.filtered.length) { grid.innerHTML = '<div class="ms-empty">Aucune photo ne correspond.</div>'; }
+    mosRenderMore();
+    while (st && MOS.shown < MOS.filtered.length && grid.scrollHeight < st + main.clientHeight + 600) { mosRenderMore(); }
+    main.scrollTop = st;
+  }
+
+  function mosBuildTypes() {
+    var box = $m("mTypes");
+    if (!MOS.typeCol) { box.innerHTML = ""; return; }
+    var seen = {};
+    MOS.records.filter(mosVisible).forEach(function (r) {
+      var v = r[MOS.typeCol] === null || r[MOS.typeCol] === undefined ? "" : String(r[MOS.typeCol]);
+      if (v) { seen[v] = 1; }
+    });
+    var vals = Object.keys(seen).sort(function (a, b) { return a.localeCompare(b, "fr", { numeric: true }); });
+    if (!vals.length) { box.innerHTML = ""; return; }
+    if (MOS.typeSel && vals.indexOf(MOS.typeSel) === -1) { MOS.typeSel = ""; }
+    box.innerHTML = "";
+    [""].concat(vals).forEach(function (v) {
+      var b = document.createElement("button");
+      b.type = "button"; b.textContent = v || "TOUS"; b.dataset.v = v;
+      b.setAttribute("aria-pressed", String(v === MOS.typeSel));
+      box.appendChild(b);
+    });
+  }
+
+  // ---- rendu progressif des vignettes ----
+  function mosRenderMore() {
+    var frag = document.createDocumentFragment();
+    MOS.filtered.slice(MOS.shown, MOS.shown + MOS_PAGE).forEach(function (r) {
+      var id = mosAttIds(r[MOS.photoCol])[0];
+      var b = document.createElement("button");
+      b.className = "ms-tile" + (r.id === HB.selectedId ? " sel" : ""); b.type = "button"; b.dataset.id = r.id;
+      var cap = mosLegend(r);
+      b.innerHTML = '<div class="ph"><img loading="lazy" decoding="async" alt=""></div>' + (cap ? '<div class="cap"></div>' : "");
+      var img = b.querySelector("img"); img.dataset.att = id; img.src = mosUrl(id);
+      if (cap) { b.querySelector(".cap").textContent = cap; b.title = cap; }
+      b.addEventListener("click", function () { mosSelect(r.id); });          // clic : sélectionne la ligne
+      b.addEventListener("dblclick", function () { mosOpenRow(r.id); });      // double clic : aperçu
+      frag.appendChild(b);
+    });
+    MOS.shown += MOS_PAGE;
+    $m("mGrid").appendChild(frag);
+  }
+
+  // Sélectionne la ligne dans le tableau du widget principal
+  function mosSelect(id) {
+    HB.selectedId = id;
+    markSelected(true);
+    syncSelection();
+  }
+  function mosMarkSel() {
+    var g = $m("mGrid");
+    if (!g) { return; }
+    var tiles = g.querySelectorAll(".ms-tile");
+    for (var i = 0; i < tiles.length; i++) { tiles[i].classList.toggle("sel", tiles[i].dataset.id === String(HB.selectedId)); }
+  }
+
+  // ---- aperçu + édition ----
+  function mosOpenRow(id) {
+    MOS.curRow = id; MOS.curImg = 0;
+    var r = MOS.records.find(function (x) { return x.id === id; });
+    if (!r) { mosCloseModal(); return; }
+    var ids = mosAttIds(r[MOS.photoCol]);
+    $m("mBig").src = mosUrl(ids[0]); mosResetZoom();
+    var strip = $m("mStrip");
+    strip.innerHTML = ids.length > 1 ? ids.map(function (a, i) {
+      return '<img data-i="' + i + '" data-att="' + a + '" src="' + mosUrl(a) + '" class="' + (i === 0 ? "cur" : "") + '" alt="">';
+    }).join("") : "";
+    strip.querySelectorAll("img").forEach(function (im) {
+      im.onclick = function () {
+        MOS.curImg = +im.dataset.i; $m("mBig").src = mosUrl(im.dataset.att); mosResetZoom();
+        strip.querySelectorAll("img").forEach(function (x) { x.classList.toggle("cur", x === im); });
+      };
+    });
+    $m("mTitle").textContent = mosLegend(r) || ("Ligne " + id);
+    $m("mPrev").style.display = $m("mNext").style.display = MOS.filtered.length > 1 ? "" : "none";
+    mosBuildFields(r);
+    $m("mModal").classList.add("on");
+    mosSelect(id);
+  }
+
+  function mosBuildFields(r) {
+    var box = $m("mFields");
+    box.innerHTML = "";
+    Object.keys(r).filter(function (k) { return !mosHidden(k) && MOS_VIEW_HIDDEN.indexOf(norm(k)) === -1; }).forEach(function (k) {
+      var v = r[k], d = document.createElement("div"); d.className = "ms-f";
+      var ty = MOS.colType[k] || "", t = typeof v;
+      function labelOf(text) { var l = document.createElement("label"); l.textContent = text; d.appendChild(l); }
+      function save(fields, ctrl) {
+        grist.docApi.applyUserActions([["UpdateRecord", HABITS_TABLE, r.id, fields]]).then(function () {
+          d.classList.add("saved"); setTimeout(function () { d.classList.remove("saved"); }, 900);
+          scheduleHabits(); scheduleGallery();
+        }).catch(function (e) { alert("Modification impossible : " + (e && e.message ? e.message : e)); });
+      }
+      if (ty.indexOf("Ref:") === 0 && !MOS.roCols.has(k) && MOS.refOpts[k]) {
+        labelOf(k);
+        var sel = document.createElement("select");
+        var cur = r.__raw[k] || 0;
+        sel.innerHTML = '<option value="0"></option>';
+        MOS.refOpts[k].forEach(function (o) { var op = document.createElement("option"); op.value = o.id; op.textContent = o.text; sel.appendChild(op); });
+        sel.value = String(cur);
+        sel.addEventListener("change", function () { var f = {}; f[k] = Number(sel.value); save(f); });
+        d.appendChild(sel);
+      } else if (ty === "Choice" && !MOS.roCols.has(k) && MOS.choiceOpts[k]) {
+        labelOf(k);
+        var sc = document.createElement("select");
+        var cv = v === null || v === undefined ? "" : String(v);
+        var list = MOS.choiceOpts[k].slice();
+        if (cv && list.indexOf(cv) === -1) { list.unshift(cv); }
+        sc.innerHTML = '<option value=""></option>';
+        list.forEach(function (c) { var op = document.createElement("option"); op.value = c; op.textContent = c; sc.appendChild(op); });
+        sc.value = cv;
+        sc.addEventListener("change", function () { var f = {}; f[k] = sc.value; save(f); });
+        d.appendChild(sc);
+      } else if (!MOS.roCols.has(k) && (t === "string" || t === "number" || t === "boolean" || v === null || v === undefined)) {
+        var isNum = /^(Int|Numeric)/.test(ty), isBool = ty === "Bool";
+        var long = t === "string" && (v.length > 50 || v.indexOf("\n") !== -1);
+        labelOf(k);
+        var inp;
+        if (isBool) { inp = document.createElement("input"); inp.type = "checkbox"; inp.checked = !!v; }
+        else if (long) { inp = document.createElement("textarea"); inp.value = v; inp.rows = 3; }
+        else { inp = document.createElement("input"); inp.type = isNum ? "number" : "text"; inp.step = "any"; inp.value = (v === null || v === undefined) ? "" : v; }
+        inp.addEventListener("change", function () {
+          var nv = isBool ? inp.checked : isNum ? (inp.value === "" ? null : Number(inp.value)) : inp.value;
+          var f = {}; f[k] = nv; save(f);
+        });
+        d.appendChild(inp);
+      } else {
+        labelOf(k + " (lecture seule)");
+        var ro = document.createElement("div"); ro.className = "ro"; ro.textContent = mosFmt(v);
+        d.appendChild(ro);
+      }
+      box.appendChild(d);
+    });
+  }
+
+  function mosStep(dir) {
+    var i = MOS.filtered.findIndex(function (x) { return x.id === MOS.curRow; });
+    if (i < 0 || !MOS.filtered.length) { return; }
+    mosOpenRow(MOS.filtered[(i + dir + MOS.filtered.length) % MOS.filtered.length].id);
+  }
+  function mosCloseModal() { $m("mModal").classList.remove("on"); MOS.curRow = null; }
+
+  // ---- zoom de l'image ----
+  function mosApplyZoom() {
+    var Z = MOS.Z, stage = $m("mStage");
+    if (Z.z <= 1) { MOS.Z = Z = { z: 1, x: 0, y: 0 }; }
+    $m("mBig").style.transform = "translate(" + Z.x + "px," + Z.y + "px) scale(" + Z.z + ")";
+    stage.style.cursor = Z.z > 1 ? (MOS.drag ? "grabbing" : "grab") : "zoom-in";
+  }
+  function mosZoomAt(nz, cx, cy) {
+    nz = Math.min(8, Math.max(1, nz));
+    var k = nz / MOS.Z.z;
+    MOS.Z.x = cx - (cx - MOS.Z.x) * k; MOS.Z.y = cy - (cy - MOS.Z.y) * k; MOS.Z.z = nz;
+    mosApplyZoom();
+  }
+  function mosResetZoom() { MOS.Z = { z: 1, x: 0, y: 0 }; mosApplyZoom(); }
+  function mosStagePt(e) { var b = $m("mStage").getBoundingClientRect(); return [e.clientX - b.left - b.width / 2, e.clientY - b.top - b.height / 2]; }
+
+  // ---- chargement des données de Mes_habits ----
+  async function mosLoadMeta() {
+    var res = await Promise.all([grist.docApi.fetchTable("_grist_Tables"), grist.docApi.fetchTable("_grist_Tables_column")]);
+    var T = res[0], C = res[1];
+    var tid = {};
+    T.id.forEach(function (id, i) { tid[id] = T.tableId[i]; });
+    var byId = {};
+    C.id.forEach(function (id, i) {
+      byId[id] = { colId: C.colId[i], type: C.type[i], parent: C.parentId[i], pos: C.parentPos[i],
+        isFormula: C.isFormula[i], formula: C.formula[i], wo: C.widgetOptions[i], visibleCol: C.visibleCol[i] };
+    });
+    var meta = Object.keys(byId).map(function (k) { return byId[k]; })
+      .filter(function (c) { return tid[c.parent] === HABITS_TABLE && !/^gristHelper_/.test(c.colId) && c.colId !== "manualSort"; })
+      .sort(function (a, b) { return a.pos - b.pos; });
+    MOS.hiddenCols = new Set(); MOS.roCols = new Set(); MOS.colType = {}; MOS.choiceOpts = {};
+    meta.forEach(function (c) {
+      MOS.colType[c.colId] = c.type;
+      if (c.type === "Choice") { try { var ch = JSON.parse(c.wo || "{}").choices; if (Array.isArray(ch)) { MOS.choiceOpts[c.colId] = ch; } } catch (e) { /* sans liste */ } }
+      if (/^Ref(List)?:/.test(c.type)) { c.target = c.type.split(":")[1]; c.show = c.visibleCol && byId[c.visibleCol] ? byId[c.visibleCol].colId : null; }
+      if (c.type === "Attachments") { MOS.hiddenCols.add(c.colId); }
+      if (c.type.indexOf("RefList:") === 0 || /^Date/.test(c.type) || c.type === "Attachments" || (c.isFormula && c.formula)) { MOS.roCols.add(c.colId); }
+    });
+    MOS.meta = meta;
+    var att = meta.filter(function (c) { return c.type === "Attachments"; });
+    var ph = att.filter(function (c) { return norm(c.colId) === "photo"; })[0] || att[0];
+    MOS.photoCol = ph ? ph.colId : "Photo";
+    function colOf(n) { var c = meta.filter(function (x) { return norm(x.colId) === n; })[0]; return c ? c.colId : null; }
+    MOS.hideCol = colOf("supprime");
+    MOS.typeCol = colOf("type");
+    MOS.legCols = ["marque", "description"].map(colOf).filter(Boolean);
+    meta.forEach(function (c) { if (MOS_FORCE_RO.indexOf(norm(c.colId)) !== -1) { MOS.roCols.add(c.colId); } });
+  }
+
+  async function mosLoad() {
+    if (!MOS.meta) { await mosLoadMeta(); }
+    var meta = MOS.meta;
+    var raw = await grist.docApi.fetchTable(HABITS_TABLE);
+    var refs = {};
+    for (var a = 0; a < meta.length; a++) {
+      var c0 = meta[a];
+      if (c0.target && !refs[c0.target]) {
+        var t0 = await grist.docApi.fetchTable(c0.target);
+        refs[c0.target] = { t: t0, idx: new Map(t0.id.map(function (id, i) { return [id, i]; })) };
+      }
+    }
+    MOS.refOpts = {};
+    meta.forEach(function (c) {
+      if (c.target && c.type.indexOf("RefList:") !== 0) {
+        var t = refs[c.target].t;
+        MOS.refOpts[c.colId] = t.id.map(function (id, i) { return { id: id, text: c.show && t[c.show] ? String(t[c.show][i] === null || t[c.show][i] === undefined ? "" : t[c.show][i]) : String(id) }; })
+          .filter(function (o) { return o.text !== ""; }).sort(function (x, y) { return x.text.localeCompare(y.text, "fr", { numeric: true }); });
+      }
+    });
+    function one(c, v) {
+      var R = refs[c.target], i = R.idx.get(v);
+      if (i === undefined) { return ""; }
+      return c.show && R.t[c.show] ? String(R.t[c.show][i] === null || R.t[c.show][i] === undefined ? "" : R.t[c.show][i]) : String(v);
+    }
+    MOS.records = raw.id.map(function (id, i) {
+      var r = { id: id, __raw: {} };
+      meta.forEach(function (c) {
+        var v = raw[c.colId] ? raw[c.colId][i] : null;
+        if (c.target) { r.__raw[c.colId] = v; }
+        if (c.type.indexOf("RefList:") === 0) { v = Array.isArray(v) ? v.filter(function (x) { return x !== "L"; }).map(function (x) { return one(c, x); }).join(", ") : ""; }
+        else if (c.target) { v = v ? one(c, v) : ""; }
+        else if (c.type === "Date" && typeof v === "number") { v = new Date(v * 1000).toLocaleDateString("fr-FR", { timeZone: "UTC" }); }
+        else if (/^DateTime/.test(c.type) && typeof v === "number") { v = new Date(v * 1000).toLocaleString("fr-FR"); }
+        r[c.colId] = v;
+      });
+      return r;
+    });
+  }
+
+  async function mosRefresh() {
+    if (!MOS.on) { return; }
+    if (MOS.loading) { MOS.again = true; return; }
+    MOS.loading = true;
+    try {
+      if (!MOS.tok) { MOS.tok = await grist.docApi.getAccessToken({ readOnly: true }); }
+      await mosLoad();
+      mosBuildIndex();
+      mosBuildTypes();
+      mosApplyFilter(true);
+      if (MOS.curRow !== null) {
+        var cur = MOS.records.find(function (r) { return r.id === MOS.curRow; });
+        if (!cur) { mosCloseModal(); }
+        else if (!/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) { mosBuildFields(cur); }
+      }
+    } catch (e) { $m("mCount").textContent = "Erreur : " + (e && e.message ? e.message : e); }
+    MOS.loading = false;
+    if (MOS.again) { MOS.again = false; mosRefresh(); }
+  }
+  function mosScheduleRefresh() {
+    if (!MOS.on) { return; }
+    clearTimeout(MOS.rt);
+    MOS.rt = setTimeout(mosRefresh, 300);
+  }
+
+  function mosToggle(on) {
+    MOS.on = on;
+    var panel = $m("habits"), btn = $m("hbMos");
+    panel.classList.toggle("mosaic-on", on);
+    btn.setAttribute("aria-pressed", String(on));
+    btn.title = on ? "Revenir au tableau" : "Afficher la mosaïque de photos";
+    if (on) { mosRefreshToken(); mosRefresh(); }
+    else { mosCloseModal(); clearTimeout(MOS.tokTimer); }
+  }
+
+  (function mosInit() {
+    $m("hbMos").addEventListener("click", function () {
+      if ($m("habits").classList.contains("collapsed")) { LAYOUT = null; applyLayout(); }
+      mosToggle(!MOS.on);
+    });
+    $m("mTypes").addEventListener("click", function (e) {
+      var b = e.target.closest("button"); if (!b) { return; }
+      MOS.typeSel = b.dataset.v;
+      $m("mTypes").querySelectorAll("button").forEach(function (x) { x.setAttribute("aria-pressed", String(x === b)); });
+      mosApplyFilter();
+    });
+    ["input", "search"].forEach(function (ev) {
+      $m("mQ").addEventListener(ev, function () { clearTimeout(MOS.timer); MOS.timer = setTimeout(function () { mosApplyFilter(); }, 120); });
+    });
+    try {
+      var sv = parseInt(localStorage.getItem("selectionPhoto.msSize"), 10);
+      if (sv >= 80 && sv <= 400) { $m("mSize").value = String(sv); }
+    } catch (e) { /* valeur par défaut */ }
+    $m("mos").style.setProperty("--ms-size", $m("mSize").value + "px");
+    $m("mSize").addEventListener("input", function (e) {
+      $m("mos").style.setProperty("--ms-size", e.target.value + "px");
+      try { localStorage.setItem("selectionPhoto.msSize", e.target.value); } catch (er) { /* non mémorisé */ }
+    });
+    new IntersectionObserver(function (es) { if (es[0].isIntersecting && MOS.shown < MOS.filtered.length) { mosRenderMore(); } },
+      { root: $m("mMain"), rootMargin: "600px" }).observe($m("mMore"));
+
+    $m("mClose").addEventListener("click", mosCloseModal);
+    $m("mClose2").addEventListener("click", mosCloseModal);
+    $m("mPrev").addEventListener("click", function () { mosStep(-1); });
+    $m("mNext").addEventListener("click", function () { mosStep(1); });
+    $m("mModal").addEventListener("click", function (e) { if (e.target === $m("mModal")) { mosCloseModal(); } });
+    document.addEventListener("keydown", function (e) {
+      if (MOS.curRow === null) { return; }
+      if (e.key === "Escape") { mosCloseModal(); return; }
+      var typing = /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
+      if (!typing && e.key === "ArrowLeft") { mosStep(-1); }
+      if (!typing && e.key === "ArrowRight") { mosStep(1); }
+    });
+
+    var stage = $m("mStage");
+    stage.addEventListener("wheel", function (e) { e.preventDefault(); var p = mosStagePt(e); mosZoomAt(MOS.Z.z * (e.deltaY < 0 ? 1.2 : 1 / 1.2), p[0], p[1]); }, { passive: false });
+    stage.addEventListener("dblclick", function (e) { var p = mosStagePt(e); if (MOS.Z.z > 1) { mosResetZoom(); } else { mosZoomAt(2.5, p[0], p[1]); } });
+    stage.addEventListener("pointerdown", function (e) { if (MOS.Z.z > 1) { MOS.drag = { x: e.clientX - MOS.Z.x, y: e.clientY - MOS.Z.y }; stage.setPointerCapture(e.pointerId); mosApplyZoom(); } });
+    stage.addEventListener("pointermove", function (e) { if (MOS.drag) { MOS.Z.x = e.clientX - MOS.drag.x; MOS.Z.y = e.clientY - MOS.drag.y; mosApplyZoom(); } });
+    stage.addEventListener("pointerup", function () { MOS.drag = null; mosApplyZoom(); });
+    $m("mZin").addEventListener("click", function () { mosZoomAt(MOS.Z.z * 1.4, 0, 0); });
+    $m("mZout").addEventListener("click", function () { mosZoomAt(MOS.Z.z / 1.4, 0, 0); });
+    $m("mZfit").addEventListener("click", mosResetZoom);
+  })();
+
   function applyTableThumb(v) { document.getElementById("hbBody").style.setProperty("--hbh", v + "px"); }
   try {
     var savedH = parseInt(localStorage.getItem("selectionPhoto.hbh"), 10);
@@ -2592,7 +3067,7 @@
   });
 
   // Se met à jour à chaque modification de la table (le contenu est relu via l'API)
-  grist.onRecords(function () { scheduleGallery(); scheduleHabits(); });
+  grist.onRecords(function () { scheduleGallery(); scheduleHabits(); mosScheduleRefresh(); });
 
 
   grist.onNewRecord(function () {
