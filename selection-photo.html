@@ -147,7 +147,7 @@
   table.hb th { position: sticky; top: 0; z-index: 1; padding: 6px 10px; text-align: left; white-space: nowrap; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: var(--panel-a); border-bottom: 1px solid var(--border); }
   table.hb td { padding: 4px 10px; vertical-align: middle; border-bottom: 1px solid var(--border); }
   table.hb tbody tr:hover td { background-color: var(--surface); }
-  table.hb td.c { text-align: center; }
+  table.hb td.c, table.hb th.c { text-align: center; }
   table.hb td.n { text-align: right; font-variant-numeric: tabular-nums; }
   table.hb img.hb-th { display: block; margin: 0 auto; height: var(--hbh, 56px); width: auto; min-width: 20px; max-width: none; border-radius: 6px; background: var(--border); cursor: zoom-in; }
   .hb-body .hint { padding: 12px; }
@@ -340,7 +340,10 @@
   .lb { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; padding: 8px; background: rgba(18, 18, 30, .94); cursor: zoom-out; }
   .lb img { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; border-radius: 8px; }
   .lb .lb-x { position: absolute; top: 8px; right: 8px; background: rgba(255, 255, 255, .85); color: #222; }
-  .lb .lb-badge { position: absolute; left: 12px; top: 12px; max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 4px 14px; border-radius: 999px; font-size: 12px; font-weight: 700; color: #1d2b3a; background: rgba(255, 255, 255, .9); }
+  .lb .lb-tl { position: absolute; left: 12px; top: 12px; max-width: 70%; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+  .lb .lb-show { padding: 5px 12px; font: inherit; font-size: 12px; font-weight: 600; color: #fff; background: rgba(0, 0, 0, .7); border: 1px solid rgba(255, 255, 255, .35); border-radius: 8px; cursor: pointer; }
+  .lb .lb-show:hover { background: rgba(0, 0, 0, .9); }
+  .lb .lb-badge { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 4px 14px; border-radius: 999px; font-size: 12px; font-weight: 700; color: #1d2b3a; background: rgba(255, 255, 255, .9); }
   .lb .lb-cap { position: absolute; left: 12px; bottom: 12px; padding: 3px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; background: rgba(0, 0, 0, .7); color: #fff; }
 
   /* ---- Date déjà enregistrée : remplacer / ajouter ---- */
@@ -882,7 +885,7 @@
     try { LB.el.remove(); } catch (e) { /* déjà retiré */ }
     LB = null;
   }
-  function openLightbox(src, caption, colors, doc, onRemove, badge) {
+  function openLightbox(src, caption, colors, doc, onRemove, badge, onShow) {
     if (!src) { return; }
     closeLightbox();
     doc = doc || document;
@@ -894,10 +897,22 @@
     var x = doc.createElement("button");
     x.type = "button"; x.className = "xbtn lb-x"; x.setAttribute("aria-label", "Fermer"); x.textContent = "\u00d7";
     lb.appendChild(x);
-    if (badge) {
-      var bd = doc.createElement("div");
-      bd.className = "lb-badge"; bd.textContent = badge;
-      lb.appendChild(bd);
+    if (badge || onShow) {
+      var tl = doc.createElement("div");
+      tl.className = "lb-tl";
+      if (onShow) {
+        var sh = doc.createElement("button");
+        sh.type = "button"; sh.className = "lb-show"; sh.textContent = "Afficher dans le tableau";
+        sh.title = "Fermer l'aperçu et sélectionner la ligne dans le tableau";
+        sh.addEventListener("click", function (ev) { ev.stopPropagation(); closeLightbox(); onShow(); });
+        tl.appendChild(sh);
+      }
+      if (badge) {
+        var bd = doc.createElement("div");
+        bd.className = "lb-badge"; bd.textContent = badge;
+        tl.appendChild(bd);
+      }
+      lb.appendChild(tl);
     }
     if (caption) {
       var cap = doc.createElement("div");
@@ -1344,7 +1359,7 @@
               img.loading = "lazy"; img.decoding = "async"; img.alt = it.choice;
               img.src = tok.baseUrl + "/attachments/" + it.att + "/download?auth=" + tok.token;
               img.addEventListener("click", function () {
-                openLightbox(img.src, it.choice, CHOICE_COLORS[it.choice], null, function () { return removeFromSelection(it.id); }, emplacementOf(it.id));
+                openLightbox(img.src, it.choice, CHOICE_COLORS[it.choice], null, function () { return removeFromSelection(it.id); }, emplacementOf(it.id), function () { revealRow(it.id); });
               });
               fig.appendChild(img);
             } else {
@@ -1397,7 +1412,7 @@
      dont la colonne Select n'est pas vide.
      ----------------------------------------------------------- */
   var HABITS_TABLE = "Mes_habits";
-  var HABIT_COLS = ["Emplacement", "Marque", "Couleur", "Taille", "Description", "nb", "Note", "Photo", "A_ranger"];
+  var HABIT_COLS = ["Photo", "Emplacement", "Marque", "Couleur", "Taille", "Description", "nb", "Note", "A_ranger"];
   var MIN_COLS = { nb: 1, Note: 1, A_ranger: 1 };
   var CANON = HABIT_COLS.concat(["Select", "Supprime", "Type"]);
   var HB = { search: "", busy: false, again: false, sig: null, timer: null, only: false, meta: null, selRules: [],
@@ -1626,6 +1641,7 @@
       var th = document.createElement("th");
       th.textContent = (meta[c] && meta[c].label) || c;
       if (MIN_COLS[c]) { th.className = "min"; }
+      else if (c === "Photo") { th.className = "c"; }
       trh.appendChild(th);
     });
     var thead = document.createElement("thead");
@@ -3021,21 +3037,26 @@
     else { mosCloseModal(); clearTimeout(MOS.tokTimer); }
   }
 
-  // « Afficher dans le tableau » : ferme la mosaïque et sélectionne la ligne de la vignette sélectionnée
-  async function showInTable() {
-    var id = HB.selectedId;
-    mosToggle(false);
+  // Affiche le tableau et y sélectionne la ligne : ferme la mosaïque, rétablit le cadre s'il est réduit
+  // et retire les filtres qui masqueraient la ligne
+  function revealRow(id) {
+    if (MOS.on) { mosToggle(false); }
     if (id === null || id === undefined) { return; }
+    HB.selectedId = id;
+    if ($m("habits").classList.contains("collapsed")) { LAYOUT = null; applyLayout(); }
     var row = document.querySelector('#hbBody tbody tr[data-id="' + id + '"]');
-    if (!row || row.hidden) {   // depuis l'optimisation, les lignes filtrées restent dans le DOM mais sont masquées
-      // la ligne est masquée par un filtre du tableau : on les retire pour la rendre visible
+    if (!row || row.hidden) {   // les lignes filtrées restent dans le DOM mais sont masquées
       HB.typeSel = ""; HB.empSel = ""; HB.search = ""; HB.only = false; HB.rangerOnly = false;
       $m("hbSearch").value = ""; $m("hbSel").checked = false; $m("hbRanger").checked = false;
       try { localStorage.setItem("selectionPhoto.only", "0"); localStorage.setItem("selectionPhoto.ranger", "0"); } catch (e) { /* non mémorisé */ }
       renderHabits();
     }
     markSelected(true);
+    syncSelection();
   }
+
+  // « Afficher dans le tableau » de la mosaïque : ligne de la vignette sélectionnée
+  function showInTable() { revealRow(HB.selectedId); }
 
   (function mosInit() {
     $m("mShow").addEventListener("click", showInTable);
