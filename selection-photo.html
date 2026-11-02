@@ -132,7 +132,12 @@
   .tp.on .tp-n { color: #2b86c5; font-weight: 600; }
   .tp.zero { opacity: .5; }
   table.hb tbody tr[hidden], .hint[hidden] { display: none; }
-  .tp-cap { padding: 2px 12px 4px; font-size: 10.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .tp-cap { display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%; padding: 2px 12px 4px; text-align: left; font: inherit; font-size: 10.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); background: transparent; border: 0; cursor: pointer; }
+  .tp-cap:hover { color: var(--text); }
+  .tp-cap .tp-chev { font-size: 14px; line-height: 1; }
+  .hb-types.collapsed { width: 30px; padding: 6px 0; overflow: hidden; }
+  .tp-vert { flex: 1; width: 100%; min-height: 0; padding: 8px 0; overflow: hidden; writing-mode: vertical-rl; text-align: left; white-space: nowrap; text-overflow: ellipsis; font: inherit; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); background: transparent; border: 0; cursor: pointer; }
+  .tp-vert:hover { color: var(--text); background: var(--surface); }
   .hb-body { flex: 1; min-width: 0; min-height: 0; overflow: auto; }
   table.hb th.min, table.hb td.min { width: 1%; white-space: nowrap; text-align: center; }
   button.plus { width: 16px; height: 16px; margin-left: 6px; padding: 0; vertical-align: middle; font-size: 12px; line-height: 1; color: var(--text); background: var(--bg); border: 1px solid var(--edge); border-radius: 50%; cursor: pointer; }
@@ -203,7 +208,7 @@
   .ms-modal.on { display: flex; }
   .ms-box { margin: auto; width: min(1100px, 96vw); height: min(760px, 94vh); display: flex; overflow: hidden; color: var(--text); background: var(--bg); border-radius: 14px; }
   .ms-view { position: relative; flex: 1 1 60%; min-width: 0; display: flex; flex-direction: column; background: #0c0f0e; }
-  .ms-stage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 8px; overflow: hidden; touch-action: none; cursor: zoom-in; }
+  .ms-stage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 8px; overflow: hidden; touch-action: pan-y; cursor: zoom-in; }
   .ms-stage img { width: 100%; height: 100%; object-fit: contain; user-select: none; -webkit-user-drag: none; will-change: transform; }
   .ms-zoom { position: absolute; top: 8px; right: 8px; z-index: 2; display: flex; gap: 6px; }
   .ms-zoom button { min-width: 34px; height: 34px; padding: 0 8px; font-size: 16px; color: #fff; background: rgba(0, 0, 0, .55); border: 0; border-radius: 8px; cursor: pointer; }
@@ -226,9 +231,18 @@
   .ms-f textarea { resize: vertical; min-height: 36px; }
   .ms-f .ro { padding: 6px 10px; color: var(--muted); background: var(--surface); border-radius: 10px; word-break: break-word; }
   .ms-f.saved input, .ms-f.saved textarea, .ms-f.saved select { border-color: var(--accent); }
+  /* barres de défilement toujours visibles (utile sur téléphone) */
+  .ms-box, .ms-fields { scrollbar-width: thin; scrollbar-color: var(--edge) transparent; }
+  .ms-box::-webkit-scrollbar, .ms-fields::-webkit-scrollbar { width: 8px; }
+  .ms-box::-webkit-scrollbar-thumb, .ms-fields::-webkit-scrollbar-thumb { background: var(--edge); border-radius: 4px; }
   @media (max-width: 700px) {
-    .ms-box { flex-direction: column; }
-    .ms-side { flex: 0 0 45%; max-width: none; border-left: 0; border-top: 1px solid var(--border); }
+    /* petit écran : tout l'aperçu défile verticalement (photo, puis champs), titre et bouton Fermer restent visibles */
+    .ms-box { flex-direction: column; width: 100vw; height: 100vh; height: 100dvh; max-height: none; border-radius: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    .ms-view { flex: none; height: 44vh; }
+    .ms-side { flex: none; max-width: none; border-left: 0; border-top: 1px solid var(--border); }
+    .ms-side h2 { position: sticky; top: 0; z-index: 3; background: var(--bg); }
+    .ms-fields { flex: none; overflow: visible; }
+    .ms-foot { position: sticky; bottom: 0; z-index: 3; }
   }
   .panel.gallery .g-head { flex-wrap: wrap; row-gap: 4px; }
 
@@ -1752,8 +1766,8 @@
       if (okE) { tTotal++; r.tIds.forEach(function (id) { if (tCounts[id] !== undefined) { tCounts[id]++; } }); }
       if (okT) { eTotal++; r.eIds.forEach(function (id) { if (eCounts[id] !== undefined) { eCounts[id]++; } }); }
     });
-    renderList("hbTypes", "Types", C.types, tCounts, tTotal, "typeSel", "typeSig", "Table « Type » (colonne Vetement) introuvable.");
-    renderList("hbEmps", "Emplacements", C.emps, eCounts, eTotal, "empSel", "empSig", "Table « Emplacements » (colonne Emplacement) introuvable.");
+    renderList("hbTypes", "Types", C.types, tCounts, tTotal, "typeSel", "typeSig", "Table « Type » (colonne Vetement) introuvable.", "typeCol");
+    renderList("hbEmps", "Emplacements", C.emps, eCounts, eTotal, "empSel", "empSig", "Table « Emplacements » (colonne Emplacement) introuvable.", "empCol");
 
     if (HB.only && !C.hasSelect) {
       habitsMessage("Colonne « Select » introuvable dans " + HABITS_TABLE + ".");
@@ -1953,15 +1967,37 @@
     return nameToId[String(lv)] !== undefined ? [nameToId[String(lv)]] : [];
   }
 
-  function renderList(boxId, caption, items, counts, total, selKey, sigKey, missingMsg) {
+  function renderList(boxId, caption, items, counts, total, selKey, sigKey, missingMsg, colKey) {
     var box = document.getElementById(boxId);
-    var sig = JSON.stringify([items, counts, total, HB[selKey]]);
+    var sig = JSON.stringify([items, counts, total, HB[selKey], HB[colKey]]);
     if (sig === HB[sigKey]) { return; }
     HB[sigKey] = sig;
     var top = box.scrollTop;
     box.innerHTML = "";
-    var cap = document.createElement("div");
-    cap.className = "tp-cap"; cap.textContent = caption;
+    function toggle() {
+      HB[colKey] = !HB[colKey];
+      HB[sigKey] = null;
+      renderList(boxId, caption, items, counts, total, selKey, sigKey, missingMsg, colKey);
+    }
+    // replié : barre verticale avec le titre à 90° (un clic déplie)
+    box.classList.toggle("collapsed", !!HB[colKey]);
+    if (HB[colKey]) {
+      var sel = "";
+      (items || []).forEach(function (t) { if (String(t.id) === HB[selKey]) { sel = t.name; } });
+      var v = document.createElement("button");
+      v.type = "button"; v.className = "tp-vert";
+      v.textContent = caption + (sel ? " : " + sel : "");
+      v.title = "Cliquer pour déplier";
+      v.addEventListener("click", toggle);
+      box.appendChild(v);
+      return;
+    }
+    var cap = document.createElement("button");
+    cap.type = "button"; cap.className = "tp-cap"; cap.title = "Cliquer pour replier";
+    var capText = document.createElement("span"); capText.textContent = caption;
+    var chev = document.createElement("span"); chev.className = "tp-chev"; chev.textContent = "\u2039";
+    cap.appendChild(capText); cap.appendChild(chev);
+    cap.addEventListener("click", toggle);
     box.appendChild(cap);
     if (!items) {
       var h = document.createElement("div");
@@ -2898,6 +2934,7 @@
     if (Z.z <= 1) { MOS.Z = Z = { z: 1, x: 0, y: 0 }; }
     $m("mBig").style.transform = "translate(" + Z.x + "px," + Z.y + "px) scale(" + Z.z + ")";
     stage.style.cursor = Z.z > 1 ? (MOS.drag ? "grabbing" : "grab") : "zoom-in";
+    stage.style.touchAction = Z.z > 1 ? "none" : "pan-y";   // image zoomée : le glissement déplace l'image ; sinon il fait défiler l'aperçu
   }
   function mosZoomAt(nz, cx, cy) {
     nz = Math.min(8, Math.max(1, nz));
