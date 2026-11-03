@@ -203,7 +203,9 @@
   .ms-tile .ph { width: 100%; aspect-ratio: 1 / 1; overflow: hidden; background: var(--border); }
   .ms-tile img { display: block; width: 100%; height: 100%; object-fit: cover; }
   .ms-tile .cap { padding: 6px 8px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .ms-empty { padding: 40px; text-align: center; color: var(--muted); }
+  .ms-empty { grid-column: 1 / -1; padding: 40px; text-align: center; color: var(--muted); }
+  .ms-tile[hidden], .ms-empty[hidden] { display: none; }
+  .ms-tile { content-visibility: auto; contain-intrinsic-size: auto calc(var(--ms-size, 160px) + 34px); }
   .ms-modal { position: fixed; inset: 0; z-index: 45; display: none; background: rgba(0, 0, 0, .78); }
   .ms-modal.on { display: flex; }
   .ms-box { margin: auto; width: min(1100px, 96vw); height: min(760px, 94vh); display: flex; overflow: hidden; color: var(--text); background: var(--bg); border-radius: 14px; }
@@ -2723,12 +2725,11 @@
      - un double clic ouvre l'aperçu (zoom, navigation, édition des champs).
      ----------------------------------------------------------- */
   var MOS = {
-    on: false, records: [], index: [], filtered: [], shown: 0, tok: null, tokTimer: null, curRow: null, curImg: 0,
+    on: false, records: [], index: [], filtered: [], tiles: {}, tileSig: null, emptyEl: null, tok: null, tokTimer: null, curRow: null, curImg: 0,
     hideCol: null, typeCol: null, typeSel: "", choiceOpts: {}, refOpts: {}, meta: null, photoCol: null, legCols: [],
     hiddenCols: new Set(), roCols: new Set(), colType: {}, loading: false, again: false, timer: null, rt: null,
     Z: { z: 1, x: 0, y: 0 }, drag: null
   };
-  var MOS_PAGE = 120;
   var MOS_FORCE_RO = ["type", "marque"];                 // colonnes en lecture seule dans l'aperçu
   var MOS_VIEW_HIDDEN = ["cat_taille", "select", "supprime"];   // colonnes non affichées dans l'aperçu (restent cherchables)
   var $m = function (id) { return document.getElementById(id); };
@@ -2751,7 +2752,7 @@
     if (!MOS.on) { return; }
     try {
       MOS.tok = await grist.docApi.getAccessToken({ readOnly: true });
-      document.querySelectorAll("#mos img[data-att], #mModal img[data-att]").forEach(function (i) { if (!i.complete) { i.src = mosUrl(i.dataset.att); } });
+      document.querySelectorAll("#mos img[data-att], #mModal img[data-att]").forEach(function (i) { if (!i.complete || i.naturalWidth === 0) { i.src = mosUrl(i.dataset.att); } });
       clearTimeout(MOS.tokTimer);
       MOS.tokTimer = setTimeout(mosRefreshToken, Math.max(30000, (MOS.tok.ttlMsecs || 300000) - 60000));
     } catch (e) { MOS.tokTimer = setTimeout(mosRefreshToken, 10000); }
@@ -2769,23 +2770,55 @@
     });
   }
 
+  // Construit toutes les vignettes une seule fois (tant que les photos/légendes ne changent pas).
+  // Les images se chargent à la demande (loading="lazy") : seules celles proches de l'écran sont téléchargées.
+  function mosBuildTiles() {
+    var vis = MOS.records.filter(mosVisible);
+    var sig = JSON.stringify(vis.map(function (r) { return [r.id, mosAttIds(r[MOS.photoCol])[0], mosLegend(r)]; }));
+    if (sig === MOS.tileSig && MOS.emptyEl) { return; }
+    MOS.tileSig = sig;
+    var grid = $m("mGrid");
+    grid.innerHTML = "";
+    MOS.tiles = {};
+    var frag = document.createDocumentFragment();
+    vis.forEach(function (r) {
+      var id = mosAttIds(r[MOS.photoCol])[0];
+      var b = document.createElement("button");
+      b.className = "ms-tile" + (r.id === HB.selectedId ? " sel" : ""); b.type = "button"; b.dataset.id = r.id;
+      var cap = mosLegend(r);
+      b.innerHTML = '<div class="ph"><img loading="lazy" decoding="async" alt=""></div>' + (cap ? '<div class="cap"></div>' : "");
+      var img = b.querySelector("img"); img.dataset.att = id; img.src = mosUrl(id);
+      if (cap) { b.querySelector(".cap").textContent = cap; b.title = cap; }
+      b.addEventListener("click", function () { mosSelect(r.id); });          // clic : sélectionne la ligne
+      b.addEventListener("dblclick", function () { mosOpenRow(r.id); });      // double clic : aperçu
+      MOS.tiles[r.id] = b;
+      frag.appendChild(b);
+    });
+    var empty = document.createElement("div");
+    empty.className = "ms-empty"; empty.textContent = "Aucune photo ne correspond."; empty.hidden = true;
+    MOS.emptyEl = empty;
+    grid.appendChild(frag);
+    grid.appendChild(empty);
+  }
+
   function mosApplyFilter(keep) {
-    var main = $m("mMain"), grid = $m("mGrid");
-    var st = keep ? main.scrollTop : 0;
     var terms = norm($m("mQ").value).split(/\s+/).filter(Boolean);
+    var on = {};
     MOS.filtered = [];
     MOS.records.forEach(function (r, i) {
       if (!mosVisible(r)) { return; }
       if (MOS.typeSel && String(MOS.typeCol ? (r[MOS.typeCol] === null || r[MOS.typeCol] === undefined ? "" : r[MOS.typeCol]) : "") !== MOS.typeSel) { return; }
-      if (terms.every(function (t) { return MOS.index[i].indexOf(t) !== -1; })) { MOS.filtered.push(r); }
+      if (terms.every(function (t) { return MOS.index[i].indexOf(t) !== -1; })) { MOS.filtered.push(r); on[r.id] = true; }
+    });
+    mosBuildTiles();
+    Object.keys(MOS.tiles).forEach(function (id) {
+      var t = MOS.tiles[id], show = !!on[id];
+      if (t.hidden === show) { t.hidden = !show; }
     });
     var total = MOS.records.filter(mosVisible).length;
     $m("mCount").textContent = MOS.filtered.length + " photo" + (MOS.filtered.length > 1 ? "s" : "") + " sur " + total;
-    grid.innerHTML = ""; MOS.shown = 0;
-    if (!MOS.filtered.length) { grid.innerHTML = '<div class="ms-empty">Aucune photo ne correspond.</div>'; }
-    mosRenderMore();
-    while (st && MOS.shown < MOS.filtered.length && grid.scrollHeight < st + main.clientHeight + 600) { mosRenderMore(); }
-    main.scrollTop = st;
+    MOS.emptyEl.hidden = MOS.filtered.length > 0;
+    if (!keep) { $m("mMain").scrollTop = 0; }
   }
 
   function mosBuildTypes() {
@@ -2806,25 +2839,6 @@
       b.setAttribute("aria-pressed", String(v === MOS.typeSel));
       box.appendChild(b);
     });
-  }
-
-  // ---- rendu progressif des vignettes ----
-  function mosRenderMore() {
-    var frag = document.createDocumentFragment();
-    MOS.filtered.slice(MOS.shown, MOS.shown + MOS_PAGE).forEach(function (r) {
-      var id = mosAttIds(r[MOS.photoCol])[0];
-      var b = document.createElement("button");
-      b.className = "ms-tile" + (r.id === HB.selectedId ? " sel" : ""); b.type = "button"; b.dataset.id = r.id;
-      var cap = mosLegend(r);
-      b.innerHTML = '<div class="ph"><img loading="lazy" decoding="async" alt=""></div>' + (cap ? '<div class="cap"></div>' : "");
-      var img = b.querySelector("img"); img.dataset.att = id; img.src = mosUrl(id);
-      if (cap) { b.querySelector(".cap").textContent = cap; b.title = cap; }
-      b.addEventListener("click", function () { mosSelect(r.id); });          // clic : sélectionne la ligne
-      b.addEventListener("dblclick", function () { mosOpenRow(r.id); });      // double clic : aperçu
-      frag.appendChild(b);
-    });
-    MOS.shown += MOS_PAGE;
-    $m("mGrid").appendChild(frag);
   }
 
   // Sélectionne la ligne dans le tableau du widget principal
@@ -3036,7 +3050,14 @@
   function mosAfterLoad() {
     if (MOS.on) { mosRefresh(); return; }
     clearTimeout(MOS.pt);
-    MOS.pt = setTimeout(function () { mosEnsure().catch(function () { /* sera repris à l'ouverture */ }); }, 150);
+    MOS.pt = setTimeout(async function () {
+      try {
+        await mosEnsure();
+        if (!MOS.tok) { MOS.tok = await galleryToken(); }
+        mosBuildTypes();
+        mosApplyFilter(true);   // vignettes prêtes (leurs images ne se chargent qu'à l'affichage)
+      } catch (e) { /* sera repris à l'ouverture */ }
+    }, 150);
   }
 
   async function mosRefresh() {
@@ -3119,8 +3140,6 @@
       $m("mos").style.setProperty("--ms-size", e.target.value + "px");
       try { localStorage.setItem("selectionPhoto.msSize", e.target.value); } catch (er) { /* non mémorisé */ }
     });
-    new IntersectionObserver(function (es) { if (es[0].isIntersecting && MOS.shown < MOS.filtered.length) { mosRenderMore(); } },
-      { root: $m("mMain"), rootMargin: "600px" }).observe($m("mMore"));
 
     $m("mClose").addEventListener("click", mosCloseModal);
     $m("mClose2").addEventListener("click", mosCloseModal);
