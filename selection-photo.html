@@ -178,7 +178,8 @@
   .g-btn.cam[aria-pressed=true] { color: #fff; background: var(--accent); border-color: var(--accent); }
 
   /* ---- Mosaïque de photos (dans le cadre LISTE DES HABITS) ---- */
-  .panel.habits.mosaic-on .g-head .hb-search, .panel.habits.mosaic-on .hb-size, .panel.habits.mosaic-on .sw, .panel.habits.mosaic-on #hbCount { display: none !important; }
+  .panel.habits:not(.mosaic-on) #mQ { display: none; }
+  .panel.habits.mosaic-on #hbSearch, .panel.habits.mosaic-on .hb-size, .panel.habits.mosaic-on .sw, .panel.habits.mosaic-on #hbCount { display: none !important; }
   .panel.habits.mosaic-on #hbMax { margin-left: auto; }
   .panel.habits.mosaic-on .hb-main { display: none; }
   .ms-root { display: none; flex: 1; min-height: 0; flex-direction: column; }
@@ -186,9 +187,8 @@
   .panel.habits.collapsed .ms-root { display: none; }
   .ms-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 7px 12px; }
   .ms-top { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px 14px; padding: 8px 12px 0; }
-  .ms-find { display: flex; flex-direction: column; gap: 6px; flex: 0 1 230px; margin-left: auto; min-width: 150px; }
-  .ms-find .hb-search { flex: none; width: 100%; }
-  .ms-find .g-btn { width: 100%; padding: 3px 10px; }
+  .ms-find { display: flex; flex: 0 0 auto; margin-left: auto; }
+  .ms-find .g-btn { padding: 3px 10px; }
   .ms-bar input[type=range] { width: 140px; accent-color: var(--slider); }
   .ms-types { display: flex; flex-wrap: wrap; flex: 1 1 260px; min-width: 0; gap: 2px; max-height: 96px; overflow-y: auto; }
   .ms-types:empty { display: none; }
@@ -246,7 +246,8 @@
     .ms-fields { flex: none; overflow: visible; }
     .ms-foot { position: sticky; bottom: 0; z-index: 3; }
   }
-  .panel.gallery .g-head { flex-wrap: wrap; row-gap: 4px; }
+  .panel.gallery .g-head { flex-wrap: wrap; row-gap: 4px; background: var(--surface); }
+  .g-title, .g-count { user-select: none; }
 
   /* ---- Formulaire « Ajouter un habit » ---- */
   .add-dlg { width: min(820px, 100%); height: auto; max-height: 100%; }
@@ -430,6 +431,7 @@
       <span id="hbCount" class="g-count"></span>
     </div>
     <input id="hbSearch" class="hb-search" type="search" placeholder="Rechercher…" aria-label="Rechercher dans le tableau" title="Filtre les lignes contenant le texte (toutes les colonnes)" autocomplete="off">
+    <input id="mQ" class="hb-search" type="search" placeholder="Rechercher…" autocomplete="off" aria-label="Rechercher dans la mosaïque" title="Filtre les vignettes contenant le texte (toutes les colonnes)">
     <button id="hbMos" class="g-btn cam" type="button" aria-pressed="false" title="Afficher la mosaïque de photos" aria-label="Mosaïque de photos">
       <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg>
     </button>
@@ -456,7 +458,6 @@
       <div id="mTypes" class="ms-types" role="group" aria-label="Sélection rapide par type"></div>
       <div class="ms-find">
         <button id="mShow" class="g-btn" type="button" disabled title="Fermer la mosaïque et sélectionner dans le tableau la ligne de la vignette sélectionnée">Afficher dans le tableau</button>
-        <input id="mQ" class="hb-search" type="search" placeholder="Rechercher dans toutes les colonnes…" autocomplete="off" aria-label="Rechercher dans la mosaïque">
       </div>
     </div>
     <div class="ms-bar">
@@ -3302,6 +3303,12 @@
       ev.stopPropagation();
       LAYOUT = (LAYOUT === pair[0]) ? null : pair[0];
       applyLayout();
+    });
+    panel.querySelector(".g-head").addEventListener("dblclick", function (ev) {
+      if (ev.target.closest("input, label, button, select")) { return; }
+      LAYOUT = (LAYOUT === pair[0]) ? null : pair[0];
+      applyLayout();
+      try { window.getSelection().removeAllRanges(); } catch (e) { /* sans effet */ }
     });
     panel.querySelector(".g-head").addEventListener("click", function (ev) {
       if (panel.classList.contains("collapsed") && !ev.target.closest("input, label, button, select")) {
