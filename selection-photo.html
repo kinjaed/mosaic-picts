@@ -311,6 +311,16 @@
     background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
   }
   .dates { flex: 1; min-height: 140px; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .dates-head { display: flex; align-items: center; justify-content: space-between; }
+  .icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; padding: 0; font: inherit; font-size: 16px; line-height: 1; letter-spacing: 0; color: var(--text); background: var(--bg); border: 1px solid var(--edge); border-radius: 8px; cursor: pointer; }
+  .icon-btn:hover:not(:disabled) { background: var(--border); }
+  .icon-btn:disabled { opacity: .4; cursor: default; }
+  .icon-btn.danger { color: var(--danger); }
+  .detail .ph-btns { display: inline-flex; gap: 6px; }
+  .detail .th-item { position: relative; display: inline-block; max-width: 100%; }
+  .detail .thumbs.fit .th-item { display: block; width: 100%; }
+  .detail .th-del { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; padding: 0; font-size: 18px; line-height: 1; color: #fff; background: rgba(0, 0, 0, .6); border: 0; border-radius: 50%; cursor: pointer; }
+  .detail .th-del:hover { background: #d64545; }
   .dates-head, .pv-head { padding: 9px 14px; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--border); }
   #dateList { flex: 1; overflow-y: auto; padding: 4px; }
   .date { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; text-align: left; font: inherit; color: var(--text); background: transparent; border: 0; border-radius: 8px; padding: 7px 10px; cursor: pointer; }
@@ -567,7 +577,9 @@
         <div class="field"><label for="yearSel">Année</label><select id="yearSel"></select></div>
         <div class="field"><label for="monthSel">Mois</label><select id="monthSel"></select></div>
         <div class="dates">
-          <div class="dates-head">Date</div>
+          <div class="dates-head"><span>Date</span>
+            <button id="hDel" class="icon-btn danger" type="button" disabled title="Supprimer cette date de l'historique" aria-label="Supprimer cette date de l'historique"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/></svg></button>
+          </div>
           <div id="dateList" role="listbox"></div>
         </div>
       </div>
@@ -1115,8 +1127,12 @@
     Object.keys(cols || {}).forEach(function (label) {
       var c = cols[label];
       if (c.type === "Choice" && !r.choice) { r.choice = c; }
-      else if (c.type === "Attachments" && !r.photo) { r.photo = c; }
     });
+    // colonne de photos : « Photo_Recap » en priorité, sinon la première colonne Pièces jointes
+    var atts = Object.keys(cols || {}).filter(function (k) { return cols[k].type === "Attachments"; });
+    var pref = atts.filter(function (k) { return norm(k) === "photo_recap" || norm(cols[k].colId) === "photo_recap"; })[0];
+    var pick = pref || atts[0];
+    r.photo = pick ? cols[pick] : null;
     return r;
   }
 
@@ -1127,8 +1143,8 @@
     s.className = "status" + (isError ? " error" : "");
   }
 
-  async function saveExtra(key, value) {
-    var e = H.sel;
+  async function saveExtra(key, value, entry) {
+    var e = entry || H.sel;
     if (!e) { return false; }
     setStatus("Enregistrement…");
     try {
@@ -1142,6 +1158,80 @@
     } catch (err) {
       setStatus("Échec : " + (err && err.message ? err.message : err), true);
       return false;
+    }
+  }
+
+  function photoIds(e) {
+    return Array.isArray(e.photo) ? e.photo.filter(function (v) { return typeof v === "number"; }) : [];
+  }
+
+  // « + » : téléverse des photos et les ajoute à la colonne Photo_Recap de l'enregistrement
+  async function addHistoryPhotos(files) {
+    var e = H.sel;
+    files = (files || []).filter(function (f) { return /^image\//.test(f.type); });
+    if (!e || !H.hcols.photo || !files.length) { return; }
+    setStatus("Téléversement…");
+    try {
+      var ids = await uploadPhotos(files.map(function (f) { return { file: f }; }));
+      var ok = await saveExtra("photo", ["L"].concat(photoIds(e), ids), e);
+      if (ok && H.sel === e) {
+        try { H.tok = await grist.docApi.getAccessToken({ readOnly: true }); } catch (x) { /* jeton conservé */ }
+        renderDetail();
+        setStatus("✓ Photo ajoutée");
+      }
+    } catch (err) {
+      setStatus("Échec : " + (err && err.message ? err.message : err), true);
+    }
+  }
+
+  // « − » : retire une photo de l'enregistrement
+  async function removeHistoryPhoto(id) {
+    var e = H.sel;
+    if (!e) { return; }
+    if (!W.confirm("Retirer cette photo de l'enregistrement ?")) { return; }
+    var rest = photoIds(e).filter(function (x) { return x !== id; });
+    var ok = await saveExtra("photo", rest.length ? ["L"].concat(rest) : null, e);
+    if (ok && H.sel === e) { renderDetail(); setStatus("✓ Photo retirée"); }
+  }
+
+  // Recalcule les numéros « (1/2) » quand plusieurs enregistrements ont la même date
+  function computeNth() {
+    var tot = {}, nth = {};
+    H.entries.forEach(function (e) { delete e.nth; tot[e.date] = (tot[e.date] || 0) + 1; });
+    for (var q = H.entries.length - 1; q >= 0; q--) {
+      var en = H.entries[q];
+      nth[en.date] = (nth[en.date] || 0) + 1;
+      if (tot[en.date] > 1) { en.nth = nth[en.date] + "/" + tot[en.date]; }
+    }
+  }
+
+  // Corbeille : supprime l'enregistrement sélectionné (une date) de la table Historique
+  async function deleteHistoryEntry() {
+    var e = H.sel;
+    if (!e) { return; }
+    var label = fmtDate(e.date) + (e.nth ? " (" + e.nth + ")" : "");
+    if (!W.confirm("Supprimer l'enregistrement du " + label + " de l'historique ?\nCette action est définitive.")) { return; }
+    var btn = $("hDel");
+    btn.disabled = true;
+    try {
+      await grist.docApi.applyUserActions([["RemoveRecord", HIST_TABLE, e.rowId]]);
+    } catch (err) {
+      btn.disabled = false;
+      W.alert("Suppression impossible : " + (err && err.message ? err.message : err));
+      return;
+    }
+    var y = $("yearSel").value, m = $("monthSel").value;
+    H.entries = H.entries.filter(function (x) { return x !== e; });
+    H.sel = null;
+    computeNth();
+    buildYears();
+    // on conserve l'année et le mois choisis tant qu'il reste des dates
+    var ys = $("yearSel");
+    if (y && Array.prototype.some.call(ys.options, function (o) { return o.value === y; })) {
+      ys.value = y;
+      buildMonths();
+      var ms = $("monthSel");
+      if (m !== "" && Array.prototype.some.call(ms.options, function (o) { return o.value === m; })) { ms.value = m; refreshList(); }
     }
   }
 
@@ -1188,6 +1278,19 @@
     }
 
     if (hc.photo) {
+      var phHead = D.createElement("div"); phHead.className = "fit-row";
+      var phLbl = D.createElement("span"); phLbl.textContent = "Photos";
+      var phBtns = D.createElement("span"); phBtns.className = "ph-btns";
+      var addB = D.createElement("button");
+      addB.type = "button"; addB.className = "icon-btn"; addB.textContent = "+";
+      addB.title = "Ajouter des photos"; addB.setAttribute("aria-label", "Ajouter des photos");
+      var fileIn = D.createElement("input");
+      fileIn.type = "file"; fileIn.accept = "image/*"; fileIn.multiple = true; fileIn.hidden = true;
+      addB.onclick = function () { fileIn.click(); };
+      fileIn.onchange = function () { var picked = Array.prototype.slice.call(fileIn.files); fileIn.value = ""; addHistoryPhotos(picked); };
+      phBtns.appendChild(addB); phBtns.appendChild(fileIn);
+      phHead.appendChild(phLbl); phHead.appendChild(phBtns); box.appendChild(phHead);
+
       var fitRow = D.createElement("div"); fitRow.className = "fit-row";
       var fitLbl = D.createElement("span"); fitLbl.textContent = "Ajuster à la largeur";
       var sw = D.createElement("button");
@@ -1208,10 +1311,16 @@
         th.appendChild(none);
       }
       ids.forEach(function (id) {
+        var item = D.createElement("div"); item.className = "th-item";
         var img = D.createElement("img");
         img.alt = "Photo"; img.src = attUrl(id);
         img.addEventListener("click", function () { openLightbox(img.src, "", null, D); });
-        th.appendChild(img);
+        var del = D.createElement("button");
+        del.type = "button"; del.className = "th-del"; del.textContent = "\u2212";
+        del.title = "Retirer cette photo"; del.setAttribute("aria-label", "Retirer cette photo");
+        del.onclick = function (ev) { ev.stopPropagation(); removeHistoryPhoto(id); };
+        item.appendChild(img); item.appendChild(del);
+        th.appendChild(item);
       });
       box.appendChild(th);
     }
@@ -1224,6 +1333,7 @@
     var body = $("pvBody");
     body.innerHTML = "";
     $("hApply").disabled = !H.sel;
+    $("hDel").disabled = !H.sel;
     renderDetail();
     if (!H.sel) { return; }
     var shown = 0;
@@ -1299,6 +1409,7 @@
     $("hClose").onclick = closeHistory;
     $("hCancel").onclick = closeHistory;
     $("hApply").onclick = applyHistory;
+    $("hDel").onclick = deleteHistoryEntry;
     $("overlay").onclick = function (ev) { if (!popup && ev.target === $("overlay")) { closeHistory(); } };
     D.onkeydown = function (ev) { if (ev.key === "Escape") { closeHistory(); } };
     $("yearSel").onchange = buildMonths;
@@ -1626,7 +1737,7 @@
         else { r.cells.push(cellText(c, data[c][i], meta, refs)); }
       });
       r.title = [r.cells[cols.indexOf("Marque")], r.cells[cols.indexOf("Description")]].filter(Boolean).join(" – ");
-      r.hay = norm(r.cells.join(" "));   // texte de recherche (colonnes affichées)
+      r.hay = norm(r.cells.join(" ") + " " + r.type);   // texte de recherche : colonnes affichées + Type
       rows.push(r);
     });
 
